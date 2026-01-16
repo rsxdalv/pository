@@ -31,9 +31,13 @@ case "$1" in
             chmod 640 /etc/pository/api-keys.json
         fi
         
-        # Install npm dependencies
+        # Install npm dependencies (use ci for reproducibility if lock file exists)
         cd /usr/share/pository
-        npm install --production --omit=dev
+        if [ -f package-lock.json ]; then
+            npm ci --production --omit=dev || npm install --production --omit=dev
+        else
+            npm install --production --omit=dev
+        fi
         
         # Generate initial admin key if not configured
         if ! grep -q "adminKey:" /etc/pository/config.yaml 2>/dev/null && \

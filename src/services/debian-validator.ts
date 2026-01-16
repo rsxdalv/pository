@@ -8,6 +8,10 @@ export interface DebianControlData {
 /**
  * Validates that a buffer contains a valid Debian package (ar archive)
  * and extracts control data.
+ * 
+ * Note: Control data extraction supports gzip-compressed control.tar files.
+ * xz and zstd compressed control files are validated but metadata extraction
+ * is skipped (package name/version must be provided via filename or form fields).
  */
 export async function validateDebianPackage(
   buffer: Buffer
@@ -99,11 +103,12 @@ async function extractControlFile(
       const { gunzipSync } = await import("node:zlib");
       decompressed = gunzipSync(data);
     } else if (name.endsWith(".xz")) {
-      // xz decompression requires external library or native module
-      // For MVP, we'll try to parse without decompression if it's a plain tar
+      // xz decompression requires external library (e.g., lzma-native)
+      // Package is still valid, but metadata must be provided via filename or form fields
       return undefined;
     } else if (name.endsWith(".zst")) {
-      // zstd decompression requires external library
+      // zstd decompression requires external library (e.g., @aspect-build/zstd)
+      // Package is still valid, but metadata must be provided via filename or form fields
       return undefined;
     } else {
       decompressed = data;

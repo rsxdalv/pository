@@ -94,6 +94,8 @@ curl -X POST http://localhost:3000/api/v1/packages \
   -F "file=@mypackage_1.0.0_amd64.deb"
 ```
 
+**Note:** Package metadata (name, version, architecture) is extracted from the Debian control file for gzip-compressed packages. For packages using xz or zstd compression (common in modern Debian packages), metadata must be provided via the filename format `name_version_arch.deb`.
+
 ### Download Package
 
 ```bash
@@ -219,6 +221,7 @@ node --import=tsx --test tests/storage.test.ts
 - Create scoped API keys with minimal required permissions
 - Use firewall rules to restrict access
 - Regularly review access logs
+- Built-in rate limiting (100 requests/minute per API key or IP)
 
 ## License
 

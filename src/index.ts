@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
+import rateLimit from "@fastify/rate-limit";
 import { loadConfig } from "./utils/config-loader.js";
 import { Logger } from "./utils/logger.js";
 import { ApiKeyService } from "./services/api-keys.js";
@@ -37,6 +38,16 @@ async function main() {
   }
 
   const app = Fastify(fastifyOpts);
+
+  // Register rate limiting
+  await app.register(rateLimit, {
+    max: 100, // 100 requests per minute
+    timeWindow: "1 minute",
+    keyGenerator: (request) => {
+      // Use API key ID if authenticated, otherwise use IP
+      return request.apiKey?.id || request.ip;
+    },
+  });
 
   // Register multipart support
   await app.register(multipart, {
