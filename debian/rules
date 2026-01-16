@@ -1,0 +1,13 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	# Skip build - TypeScript runs directly with Node.js
+
+override_dh_auto_test:
+	# Skip tests during package build
+
+override_dh_auto_install:
+	# Handled by debian/install file

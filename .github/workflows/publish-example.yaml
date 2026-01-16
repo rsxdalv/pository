@@ -1,0 +1,101 @@
+# Example GitHub Actions Workflow: Publish Debian Package to Pository
+#
+# This workflow demonstrates how to build a Debian package and publish
+# it to a pository instance.
+#
+# Required secrets:
+# - POSITORY_URL: URL of your pository instance (e.g., https://pository.example.com)
+# - POSITORY_API_KEY: API key with 'write' permission
+#
+# Optional inputs:
+# - repo: Repository name (default: 'default')
+# - distribution: Distribution name (default: 'stable')
+# - component: Component name (default: 'main')
+
+name: Publish to Pository
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'Repository name'
+        required: false
+        default: 'default'
+      distribution:
+        description: 'Distribution (e.g., stable, unstable)'
+        required: false
+        default: 'stable'
+      component:
+        description: 'Component (e.g., main, contrib)'
+        required: false
+        default: 'main'
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y devscripts debhelper dh-exec
+      
+      - name: Install npm dependencies
+        run: npm ci
+      
+      - name: Build Debian package
+        run: |
+          dpkg-buildpackage -us -uc -b
+          mkdir -p dist
+          mv ../pository_*.deb dist/
+      
+      - name: Get package filename
+        id: package
+        run: |
+          DEB_FILE=$(ls dist/*.deb | head -1)
+          echo "file=$DEB_FILE" >> $GITHUB_OUTPUT
+          echo "filename=$(basename $DEB_FILE)" >> $GITHUB_OUTPUT
+      
+      - name: Publish to Pository
+        env:
+          POSITORY_URL: ${{ secrets.POSITORY_URL }}
+          POSITORY_API_KEY: ${{ secrets.POSITORY_API_KEY }}
+        run: |
+          if [ -z "$POSITORY_URL" ] || [ -z "$POSITORY_API_KEY" ]; then
+            echo "::warning::POSITORY_URL or POSITORY_API_KEY not set. Skipping publish."
+            exit 0
+          fi
+          
+          REPO="${{ github.event.inputs.repo || 'default' }}"
+          DIST="${{ github.event.inputs.distribution || 'stable' }}"
+          COMPONENT="${{ github.event.inputs.component || 'main' }}"
+          
+          echo "Publishing ${{ steps.package.outputs.filename }} to $POSITORY_URL"
+          echo "Repository: $REPO, Distribution: $DIST, Component: $COMPONENT"
+          
+          curl -X POST "$POSITORY_URL/api/v1/packages" \
+            -H "X-Api-Key: $POSITORY_API_KEY" \
+            -F "repo=$REPO" \
+            -F "distribution=$DIST" \
+            -F "component=$COMPONENT" \
+            -F "file=@${{ steps.package.outputs.file }}" \
+            --fail-with-body
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-package
+          path: dist/*.deb

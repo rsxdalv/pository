@@ -1,0 +1,9 @@
+pository (0.1.0) stable; urgency=low
+
+  * Initial release
+  * Debian package artifact repository service
+  * REST API for upload, download, list, delete
+  * API key authentication with role-based access
+  * Filesystem-backed storage
+
+ -- Pository Team <pository@example.com>  Thu, 16 Jan 2026 00:00:00 +0000
