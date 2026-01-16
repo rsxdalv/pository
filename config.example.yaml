@@ -1,0 +1,40 @@
+# Pository Configuration File
+# Place at /etc/pository/config.yaml or specify via POSITORY_CONFIG env var
+
+# Data storage root directory
+dataRoot: /var/lib/pository
+
+# Log file directory
+logPath: /var/log/pository
+
+# Server settings
+port: 3000
+bindAddress: 0.0.0.0
+
+# TLS configuration (optional)
+tls:
+  enabled: false
+  # cert: /etc/pository/server.crt
+  # key: /etc/pository/server.key
+
+# Upload size limit (in bytes)
+maxUploadSize: 104857600  # 100MB
+
+# Allowed repository names (empty means all allowed)
+allowedRepos:
+  - default
+  - releases
+  - snapshots
+
+# Path to API keys storage
+apiKeysPath: /etc/pository/api-keys.json
+
+# Bootstrap admin key (can also be set via POSITORY_ADMIN_KEY env var)
+# WARNING: Change this in production!
+# adminKey: your-secret-admin-key
+
+# Retention policy (optional)
+retention:
+  enabled: false
+  # keepLastN: 5
+  # maxAgeDays: 90

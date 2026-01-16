@@ -1,0 +1,5 @@
+#!/usr/bin/dh-exec
+src/ => /usr/share/pository/src/
+package.json => /usr/share/pository/package.json
+package-lock.json => /usr/share/pository/package-lock.json
+config.example.yaml => /etc/pository/config.yaml

@@ -1,0 +1,45 @@
+[Unit]
+Description=Pository - Debian Package Artifact Repository
+Documentation=https://github.com/rsxdalv/pository
+After=network.target
+
+[Service]
+Type=simple
+User=pository
+Group=pository
+WorkingDirectory=/usr/share/pository
+
+# Main process
+ExecStart=/usr/bin/node --import=tsx /usr/share/pository/src/index.ts /etc/pository/config.yaml
+
+# Environment file for secrets
+EnvironmentFile=-/etc/default/pository
+
+# Restart on failure
+Restart=on-failure
+RestartSec=5s
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pository /var/log/pository /etc/pository
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pository
+
+[Install]
+WantedBy=multi-user.target

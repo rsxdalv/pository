@@ -1,0 +1,39 @@
+{
+  "name": "pository",
+  "version": "0.1.0",
+  "description": "A lightweight Debian package artifact repository",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "node --import=tsx src/index.ts",
+    "dev": "node --import=tsx --watch src/index.ts",
+    "test": "node --import=tsx --test tests/storage.test.ts tests/api-keys.test.ts tests/debian-validator.test.ts tests/integration.test.ts",
+    "lint": "eslint src tests --ext .ts"
+  },
+  "keywords": [
+    "debian",
+    "package",
+    "repository",
+    "artifact"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "fastify": "^5.3.2",
+    "@fastify/multipart": "^9.1.0",
+    "yaml": "^2.7.0",
+    "argon2": "^0.41.1",
+    "ar-async": "^0.1.4"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4",
+    "@types/node": "^22.15.2",
+    "typescript": "^5.8.2",
+    "eslint": "^9.26.0",
+    "@eslint/js": "^9.26.0",
+    "typescript-eslint": "^8.31.1"
+  }
+}

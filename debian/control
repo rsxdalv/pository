@@ -1,0 +1,15 @@
+Source: pository
+Section: web
+Priority: optional
+Maintainer: Pository Team <pository@example.com>
+Build-Depends: debhelper (>= 11), nodejs (>= 20)
+Standards-Version: 4.1.4
+Homepage: https://github.com/rsxdalv/pository
+
+Package: pository
+Architecture: all
+Depends: nodejs (>= 20)
+Description: Lightweight Debian package artifact repository
+ Pository is a minimal, self-hosted artifact repository for Debian packages.
+ It provides REST API for uploading, downloading, listing, and deleting
+ Debian packages with API key authentication and role-based access control.

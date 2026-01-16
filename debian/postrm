@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    purge)
+        # Remove data directories
+        rm -rf /var/lib/pository
+        rm -rf /var/log/pository
+        rm -rf /etc/pository
+        
+        # Remove user and group
+        deluser --system pository 2>/dev/null || true
+        delgroup --system pository 2>/dev/null || true
+        ;;
+esac
+
+exit 0

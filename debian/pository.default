@@ -1,0 +1,21 @@
+# Pository environment configuration
+# Uncomment and modify as needed
+
+# Override admin key (alternative to config file)
+# POSITORY_ADMIN_KEY=your-secret-admin-key
+
+# Override data directory
+# POSITORY_DATA_ROOT=/var/lib/pository
+
+# Override log directory
+# POSITORY_LOG_PATH=/var/log/pository
+
+# Override port
+# POSITORY_PORT=3000
+
+# Override bind address
+# POSITORY_BIND_ADDRESS=0.0.0.0
+
+# TLS settings
+# POSITORY_TLS_CERT=/etc/pository/server.crt
+# POSITORY_TLS_KEY=/etc/pository/server.key

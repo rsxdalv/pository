@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove|purge)
+        # Stop service
+        systemctl stop pository.service 2>/dev/null || true
+        systemctl disable pository.service 2>/dev/null || true
+        ;;
+esac
+
+exit 0
