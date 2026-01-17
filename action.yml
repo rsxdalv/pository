@@ -50,10 +50,19 @@ runs:
           echo "::error::API key is required"
           exit 1
         fi
-        if [ ! -f "${{ inputs.file }}" ]; then
+        
+        # Expand glob pattern and get first match
+        FILES=(${{ inputs.file }})
+        if [ ${#FILES[@]} -eq 0 ] || [ ! -f "${FILES[0]}" ]; then
           echo "::error::Package file not found: ${{ inputs.file }}"
           exit 1
         fi
+        
+        # Use the first file if multiple matches
+        PACKAGE_FILE="${FILES[0]}"
+        echo "package-file=${PACKAGE_FILE}" >> $GITHUB_ENV
+        echo "Found package file: ${PACKAGE_FILE}"
+        
         echo "✓ All inputs validated successfully"
 
     - name: Upload package to Pository
@@ -62,11 +71,13 @@ runs:
       env:
         POSITORY_HOST: ${{ inputs.host }}
         POSITORY_API_KEY: ${{ inputs.api-key }}
-        PACKAGE_FILE: ${{ inputs.file }}
         REPO: ${{ inputs.repo }}
         DIST: ${{ inputs.distribution }}
         COMPONENT: ${{ inputs.component }}
       run: |
+        # Use the validated file from environment
+        PACKAGE_FILE="${{ env.package-file }}"
+        
         echo "Uploading package to Pository..."
         echo "Host: ${POSITORY_HOST}"
         echo "Repository: ${REPO}"

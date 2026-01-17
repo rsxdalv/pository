@@ -22,7 +22,7 @@ A GitHub Action for uploading Debian packages to a Pository instance.
 |-------|----------|---------|-------------|
 | `host` | Yes | - | URL of your Pository instance (e.g., `https://pository.example.com`) |
 | `api-key` | Yes | - | API key with write permission |
-| `file` | Yes | - | Path to the Debian package file to upload |
+| `file` | Yes | - | Path to the Debian package file to upload. Supports glob patterns (e.g., `dist/*.deb`). If multiple files match, the first one is used. |
 | `repo` | No | `default` | Repository name |
 | `distribution` | No | `stable` | Distribution name (e.g., stable, unstable) |
 | `component` | No | `main` | Component name (e.g., main, contrib) |
