@@ -4,3 +4,13 @@ dist/
 .env
 /var/
 *.deb
+
+# Debian build artifacts
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/*.substvars
+debian/*.debhelper
+debian/pository/
+*.buildinfo
+*.changes

@@ -10,4 +10,9 @@ override_dh_auto_test:
 	# Skip tests during package build
 
 override_dh_auto_install:
-	# Handled by debian/install file
+	# Install application files
+	mkdir -p debian/pository/usr/share/pository
+	mkdir -p debian/pository/etc/pository
+	cp -r src debian/pository/usr/share/pository/
+	cp package.json package-lock.json debian/pository/usr/share/pository/
+	cp config.example.yaml debian/pository/etc/pository/config.yaml
