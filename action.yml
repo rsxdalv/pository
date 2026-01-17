@@ -77,7 +77,7 @@ runs:
           exit 1
         fi
         
-        echo "package-file=${PACKAGE_FILE}" >> $GITHUB_ENV
+        echo "PACKAGE_FILE_PATH=${PACKAGE_FILE}" >> $GITHUB_ENV
         echo "Found package file: ${PACKAGE_FILE}"
         
         echo "✓ All inputs validated successfully"
@@ -93,7 +93,7 @@ runs:
         COMPONENT: ${{ inputs.component }}
       run: |
         # Use the validated file from environment
-        PACKAGE_FILE="${{ env.package-file }}"
+        PACKAGE_FILE="${{ env.PACKAGE_FILE_PATH }}"
         
         echo "Uploading package to Pository..."
         echo "Host: ${POSITORY_HOST}"
