@@ -91,9 +91,10 @@ runs:
         REPO: ${{ inputs.repo }}
         DIST: ${{ inputs.distribution }}
         COMPONENT: ${{ inputs.component }}
+        PACKAGE_FILE_PATH: ${{ env.PACKAGE_FILE_PATH }}
       run: |
-        # Use the validated file from environment
-        PACKAGE_FILE="${{ env.PACKAGE_FILE_PATH }}"
+        # Use the validated file from environment variable
+        PACKAGE_FILE="${PACKAGE_FILE_PATH}"
         
         echo "Uploading package to Pository..."
         echo "Host: ${POSITORY_HOST}"
@@ -118,8 +119,12 @@ runs:
         fi
         
         # Upload the package
-        # Use RUNNER_TEMP or mktemp for response file to avoid race conditions
-        RESPONSE_FILE="${RUNNER_TEMP:-/tmp}/pository-response-$$.json"
+        # Use mktemp for secure unique temporary file
+        if [ -n "$RUNNER_TEMP" ]; then
+          RESPONSE_FILE=$(mktemp "${RUNNER_TEMP}/pository-response-XXXXXX.json")
+        else
+          RESPONSE_FILE=$(mktemp /tmp/pository-response-XXXXXX.json)
+        fi
         
         # Use environment variable for API key to avoid exposure in process list
         HTTP_CODE=$(curl -X POST "${POSITORY_HOST}/api/v1/packages" \

@@ -101,7 +101,7 @@ jobs:
           echo "This confirms the action is structurally correct and validates inputs properly"
       
       - name: Test action with real Pository instance (if configured)
-        if: vars.POSITORY_URL && secrets.POSITORY_API_KEY
+        if: vars.POSITORY_URL != '' && secrets.POSITORY_API_KEY != ''
         uses: ./
         with:
           host: ${{ vars.POSITORY_URL }}
