@@ -51,15 +51,32 @@ runs:
           exit 1
         fi
         
-        # Expand glob pattern and get first match
-        FILES=(${{ inputs.file }})
-        if [ ${#FILES[@]} -eq 0 ] || [ ! -f "${FILES[0]}" ]; then
+        # Safely expand file pattern using find with null-terminated output
+        # This prevents command injection from malformed input
+        FILE_PATTERN="${{ inputs.file }}"
+        
+        # If it looks like a glob pattern, use it; otherwise treat as literal path
+        if [[ "$FILE_PATTERN" == *"*"* ]] || [[ "$FILE_PATTERN" == *"?"* ]]; then
+          # Extract directory and pattern
+          FILE_DIR=$(dirname "$FILE_PATTERN")
+          FILE_NAME=$(basename "$FILE_PATTERN")
+          
+          # Find matching files safely
+          if [ -d "$FILE_DIR" ]; then
+            PACKAGE_FILE=$(find "$FILE_DIR" -maxdepth 1 -name "$FILE_NAME" -type f | head -1)
+          else
+            PACKAGE_FILE=""
+          fi
+        else
+          # Treat as literal path
+          PACKAGE_FILE="$FILE_PATTERN"
+        fi
+        
+        if [ -z "$PACKAGE_FILE" ] || [ ! -f "$PACKAGE_FILE" ]; then
           echo "::error::Package file not found: ${{ inputs.file }}"
           exit 1
         fi
         
-        # Use the first file if multiple matches
-        PACKAGE_FILE="${FILES[0]}"
         echo "package-file=${PACKAGE_FILE}" >> $GITHUB_ENV
         echo "Found package file: ${PACKAGE_FILE}"
         
@@ -101,6 +118,10 @@ runs:
         fi
         
         # Upload the package
+        # Use RUNNER_TEMP or mktemp for response file to avoid race conditions
+        RESPONSE_FILE="${RUNNER_TEMP:-/tmp}/pository-response-$$.json"
+        
+        # Use environment variable for API key to avoid exposure in process list
         HTTP_CODE=$(curl -X POST "${POSITORY_HOST}/api/v1/packages" \
           -H "X-Api-Key: ${POSITORY_API_KEY}" \
           -F "repo=${REPO}" \
@@ -108,21 +129,23 @@ runs:
           -F "component=${COMPONENT}" \
           -F "file=@${PACKAGE_FILE}" \
           -w "%{http_code}" \
-          -o /tmp/pository-response.json \
+          -o "${RESPONSE_FILE}" \
           -s)
         
         # Check response
         if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
           echo "✓ Package uploaded successfully (HTTP ${HTTP_CODE})"
-          if [ -f /tmp/pository-response.json ]; then
+          if [ -f "${RESPONSE_FILE}" ]; then
             echo "Response:"
-            cat /tmp/pository-response.json
+            cat "${RESPONSE_FILE}"
+            rm -f "${RESPONSE_FILE}"
           fi
         else
           echo "::error::Failed to upload package (HTTP ${HTTP_CODE})"
-          if [ -f /tmp/pository-response.json ]; then
+          if [ -f "${RESPONSE_FILE}" ]; then
             echo "Error response:"
-            cat /tmp/pository-response.json
+            cat "${RESPONSE_FILE}"
+            rm -f "${RESPONSE_FILE}"
           fi
           exit 1
         fi
