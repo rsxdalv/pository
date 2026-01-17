@@ -1,0 +1,121 @@
+name: 'Push to Pository'
+description: 'Upload a Debian package to a Pository instance'
+author: 'Pository Contributors'
+
+inputs:
+  host:
+    description: 'URL of the Pository instance (e.g., https://pository.example.com)'
+    required: true
+  api-key:
+    description: 'API key with write permission for the Pository instance'
+    required: true
+  file:
+    description: 'Path to the Debian package file to upload'
+    required: true
+  repo:
+    description: 'Repository name in Pository'
+    required: false
+    default: 'default'
+  distribution:
+    description: 'Distribution name (e.g., stable, unstable)'
+    required: false
+    default: 'stable'
+  component:
+    description: 'Component name (e.g., main, contrib)'
+    required: false
+    default: 'main'
+
+outputs:
+  package-name:
+    description: 'Name of the uploaded package'
+    value: ${{ steps.upload.outputs.package-name }}
+  package-version:
+    description: 'Version of the uploaded package'
+    value: ${{ steps.upload.outputs.package-version }}
+  package-architecture:
+    description: 'Architecture of the uploaded package'
+    value: ${{ steps.upload.outputs.package-architecture }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.host }}" ]; then
+          echo "::error::Host URL is required"
+          exit 1
+        fi
+        if [ -z "${{ inputs.api-key }}" ]; then
+          echo "::error::API key is required"
+          exit 1
+        fi
+        if [ ! -f "${{ inputs.file }}" ]; then
+          echo "::error::Package file not found: ${{ inputs.file }}"
+          exit 1
+        fi
+        echo "✓ All inputs validated successfully"
+
+    - name: Upload package to Pository
+      id: upload
+      shell: bash
+      env:
+        POSITORY_HOST: ${{ inputs.host }}
+        POSITORY_API_KEY: ${{ inputs.api-key }}
+        PACKAGE_FILE: ${{ inputs.file }}
+        REPO: ${{ inputs.repo }}
+        DIST: ${{ inputs.distribution }}
+        COMPONENT: ${{ inputs.component }}
+      run: |
+        echo "Uploading package to Pository..."
+        echo "Host: ${POSITORY_HOST}"
+        echo "Repository: ${REPO}"
+        echo "Distribution: ${DIST}"
+        echo "Component: ${COMPONENT}"
+        echo "Package: ${PACKAGE_FILE}"
+        
+        # Extract package metadata from filename (format: name_version_arch.deb)
+        FILENAME=$(basename "${PACKAGE_FILE}")
+        echo "Filename: ${FILENAME}"
+        
+        # Attempt to extract metadata
+        if [[ "$FILENAME" =~ ^(.+)_(.+)_(.+)\.deb$ ]]; then
+          PKG_NAME="${BASH_REMATCH[1]}"
+          PKG_VERSION="${BASH_REMATCH[2]}"
+          PKG_ARCH="${BASH_REMATCH[3]}"
+          echo "Extracted metadata: ${PKG_NAME} ${PKG_VERSION} ${PKG_ARCH}"
+          echo "package-name=${PKG_NAME}" >> $GITHUB_OUTPUT
+          echo "package-version=${PKG_VERSION}" >> $GITHUB_OUTPUT
+          echo "package-architecture=${PKG_ARCH}" >> $GITHUB_OUTPUT
+        fi
+        
+        # Upload the package
+        HTTP_CODE=$(curl -X POST "${POSITORY_HOST}/api/v1/packages" \
+          -H "X-Api-Key: ${POSITORY_API_KEY}" \
+          -F "repo=${REPO}" \
+          -F "distribution=${DIST}" \
+          -F "component=${COMPONENT}" \
+          -F "file=@${PACKAGE_FILE}" \
+          -w "%{http_code}" \
+          -o /tmp/pository-response.json \
+          -s)
+        
+        # Check response
+        if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+          echo "✓ Package uploaded successfully (HTTP ${HTTP_CODE})"
+          if [ -f /tmp/pository-response.json ]; then
+            echo "Response:"
+            cat /tmp/pository-response.json
+          fi
+        else
+          echo "::error::Failed to upload package (HTTP ${HTTP_CODE})"
+          if [ -f /tmp/pository-response.json ]; then
+            echo "Error response:"
+            cat /tmp/pository-response.json
+          fi
+          exit 1
+        fi
+
+branding:
+  icon: 'upload-cloud'
+  color: 'blue'

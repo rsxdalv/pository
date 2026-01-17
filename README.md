@@ -182,7 +182,40 @@ All configuration options can be overridden with environment variables:
 
 ## GitHub Actions Integration
 
-See `.github/workflows/publish-example.yaml` for an example workflow that builds and publishes a Debian package to a pository instance.
+### Using the Pository Action
+
+This repository provides a reusable GitHub Action for uploading Debian packages to a Pository instance.
+
+```yaml
+- name: Upload to Pository
+  uses: rsxdalv/pository@main
+  with:
+    host: ${{ secrets.POSITORY_URL }}
+    api-key: ${{ secrets.POSITORY_API_KEY }}
+    file: path/to/package.deb
+    repo: 'default'           # optional, defaults to 'default'
+    distribution: 'stable'    # optional, defaults to 'stable'
+    component: 'main'         # optional, defaults to 'main'
+```
+
+**Inputs:**
+- `host` (required): URL of your Pository instance (e.g., `https://pository.example.com`)
+- `api-key` (required): API key with write permission
+- `file` (required): Path to the Debian package file to upload
+- `repo` (optional): Repository name, defaults to `default`
+- `distribution` (optional): Distribution name, defaults to `stable`
+- `component` (optional): Component name, defaults to `main`
+
+**Outputs:**
+- `package-name`: Name of the uploaded package
+- `package-version`: Version of the uploaded package
+- `package-architecture`: Architecture of the uploaded package
+
+**Security Note:** Always store your Pository URL and API key as GitHub secrets for additional security.
+
+### Example Workflow
+
+See `.github/workflows/publish-example.yaml` for a complete example workflow that builds and publishes a Debian package to a pository instance.
 
 Required secrets:
 - `POSITORY_URL`: URL of your pository instance
