@@ -100,8 +100,10 @@ jobs:
           echo "✓ Action executed and failed as expected (no server available)"
           echo "This confirms the action is structurally correct and validates inputs properly"
       
+      # Only run this step if both POSITORY_URL and POSITORY_API_KEY are configured
+      # This allows the workflow to succeed even without a real Pository instance
       - name: Test action with real Pository instance (if configured)
-        if: vars.POSITORY_URL != '' && secrets.POSITORY_API_KEY != ''
+        if: ${{ vars.POSITORY_URL != '' && secrets.POSITORY_API_KEY != '' }}
         uses: ./
         with:
           host: ${{ vars.POSITORY_URL }}

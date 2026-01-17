@@ -91,9 +91,8 @@ runs:
         REPO: ${{ inputs.repo }}
         DIST: ${{ inputs.distribution }}
         COMPONENT: ${{ inputs.component }}
-        PACKAGE_FILE_PATH: ${{ env.PACKAGE_FILE_PATH }}
       run: |
-        # Use the validated file from environment variable
+        # Use the validated file from environment variable (set in previous step via GITHUB_ENV)
         PACKAGE_FILE="${PACKAGE_FILE_PATH}"
         
         echo "Uploading package to Pository..."
