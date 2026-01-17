@@ -124,9 +124,11 @@ runs:
         # Fall back to filename parsing if dpkg-deb failed (for xz/zstd compressed packages)
         # Note: Debian naming convention is name_version_arch.deb
         # Package name can contain underscores, so we match from the right
+        # This regex is a best-effort fallback - dpkg-deb (above) handles complex versions correctly
         if [ -z "$PKG_NAME" ]; then
           # Match version and arch from right, everything else is the package name
           # Pattern: <name>_<version>_<arch>.deb where arch is last underscore-separated field
+          # Limitation: Versions with underscores may not parse correctly, but dpkg-deb handles those
           if [[ "$FILENAME" =~ ^(.+)_([^_]+)_([^_]+)\.deb$ ]]; then
             PKG_NAME="${BASH_REMATCH[1]}"
             PKG_VERSION="${BASH_REMATCH[2]}"
