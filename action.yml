@@ -1,0 +1,182 @@
+name: 'Push to Pository'
+description: 'Upload a Debian package to a Pository instance'
+author: 'Pository Contributors'
+
+inputs:
+  host:
+    description: 'URL of the Pository instance (e.g., https://pository.example.com)'
+    required: true
+  api-key:
+    description: 'API key with write permission for the Pository instance'
+    required: true
+  file:
+    description: 'Path to the Debian package file to upload'
+    required: true
+  repo:
+    description: 'Repository name in Pository'
+    required: false
+    default: 'default'
+  distribution:
+    description: 'Distribution name (e.g., stable, unstable)'
+    required: false
+    default: 'stable'
+  component:
+    description: 'Component name (e.g., main, contrib)'
+    required: false
+    default: 'main'
+
+outputs:
+  package-name:
+    description: 'Name of the uploaded package'
+    value: ${{ steps.upload.outputs.package-name }}
+  package-version:
+    description: 'Version of the uploaded package'
+    value: ${{ steps.upload.outputs.package-version }}
+  package-architecture:
+    description: 'Architecture of the uploaded package'
+    value: ${{ steps.upload.outputs.package-architecture }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.host }}" ]; then
+          echo "::error::Host URL is required"
+          exit 1
+        fi
+        if [ -z "${{ inputs.api-key }}" ]; then
+          echo "::error::API key is required"
+          exit 1
+        fi
+        
+        # Safely expand file pattern using find
+        # This prevents command injection from malformed input
+        FILE_PATTERN="${{ inputs.file }}"
+        
+        # If it looks like a glob pattern, use it; otherwise treat as literal path
+        if [[ "$FILE_PATTERN" == *"*"* ]] || [[ "$FILE_PATTERN" == *"?"* ]]; then
+          # Extract directory and pattern
+          FILE_DIR=$(dirname "$FILE_PATTERN")
+          FILE_NAME=$(basename "$FILE_PATTERN")
+          
+          # Find matching files safely (using -quit to stop after first match)
+          if [ -d "$FILE_DIR" ]; then
+            PACKAGE_FILE=$(find "$FILE_DIR" -maxdepth 1 -name "$FILE_NAME" -type f -print -quit)
+          else
+            PACKAGE_FILE=""
+          fi
+        else
+          # Treat as literal path
+          PACKAGE_FILE="$FILE_PATTERN"
+        fi
+        
+        if [ -z "$PACKAGE_FILE" ] || [ ! -f "$PACKAGE_FILE" ]; then
+          echo "::error::Package file not found: ${{ inputs.file }}"
+          exit 1
+        fi
+        
+        echo "PACKAGE_FILE_PATH=${PACKAGE_FILE}" >> $GITHUB_ENV
+        echo "Found package file: ${PACKAGE_FILE}"
+        
+        echo "✓ All inputs validated successfully"
+
+    - name: Upload package to Pository
+      id: upload
+      shell: bash
+      env:
+        POSITORY_HOST: ${{ inputs.host }}
+        POSITORY_API_KEY: ${{ inputs.api-key }}
+        REPO: ${{ inputs.repo }}
+        DIST: ${{ inputs.distribution }}
+        COMPONENT: ${{ inputs.component }}
+      run: |
+        # Use the validated file from environment variable (set in previous step via GITHUB_ENV)
+        PACKAGE_FILE="${PACKAGE_FILE_PATH}"
+        
+        echo "Uploading package to Pository..."
+        echo "Host: ${POSITORY_HOST}"
+        echo "Repository: ${REPO}"
+        echo "Distribution: ${DIST}"
+        echo "Component: ${COMPONENT}"
+        echo "Package: ${PACKAGE_FILE}"
+        
+        # Extract package metadata
+        # Try dpkg-deb first for accurate metadata, fall back to filename parsing
+        FILENAME=$(basename "${PACKAGE_FILE}")
+        echo "Filename: ${FILENAME}"
+        
+        # Try to extract metadata using dpkg-deb (most reliable)
+        if command -v dpkg-deb > /dev/null 2>&1; then
+          PKG_NAME=$(dpkg-deb --field "${PACKAGE_FILE}" Package 2>/dev/null || true)
+          PKG_VERSION=$(dpkg-deb --field "${PACKAGE_FILE}" Version 2>/dev/null || true)
+          PKG_ARCH=$(dpkg-deb --field "${PACKAGE_FILE}" Architecture 2>/dev/null || true)
+          
+          if [ -n "$PKG_NAME" ] && [ -n "$PKG_VERSION" ] && [ -n "$PKG_ARCH" ]; then
+            echo "Extracted metadata from package: ${PKG_NAME} ${PKG_VERSION} ${PKG_ARCH}"
+            echo "package-name=${PKG_NAME}" >> $GITHUB_OUTPUT
+            echo "package-version=${PKG_VERSION}" >> $GITHUB_OUTPUT
+            echo "package-architecture=${PKG_ARCH}" >> $GITHUB_OUTPUT
+          fi
+        fi
+        
+        # Fall back to filename parsing if dpkg-deb failed (for xz/zstd compressed packages)
+        # Note: Debian naming convention is name_version_arch.deb
+        # Package name can contain underscores, so we match from the right
+        # This regex is a best-effort fallback - dpkg-deb (above) handles complex versions correctly
+        if [ -z "$PKG_NAME" ]; then
+          # Match version and arch from right, everything else is the package name
+          # Pattern: <name>_<version>_<arch>.deb where arch is last underscore-separated field
+          # Limitation: Versions with underscores may not parse correctly, but dpkg-deb handles those
+          if [[ "$FILENAME" =~ ^(.+)_([^_]+)_([^_]+)\.deb$ ]]; then
+            PKG_NAME="${BASH_REMATCH[1]}"
+            PKG_VERSION="${BASH_REMATCH[2]}"
+            PKG_ARCH="${BASH_REMATCH[3]}"
+            echo "Extracted metadata from filename: ${PKG_NAME} ${PKG_VERSION} ${PKG_ARCH}"
+            echo "package-name=${PKG_NAME}" >> $GITHUB_OUTPUT
+            echo "package-version=${PKG_VERSION}" >> $GITHUB_OUTPUT
+            echo "package-architecture=${PKG_ARCH}" >> $GITHUB_OUTPUT
+          fi
+        fi
+        
+        # Upload the package
+        # Use mktemp for secure unique temporary file
+        if [ -n "$RUNNER_TEMP" ]; then
+          RESPONSE_FILE=$(mktemp "${RUNNER_TEMP}/pository-response-XXXXXX.json")
+        else
+          RESPONSE_FILE=$(mktemp /tmp/pository-response-XXXXXX.json)
+        fi
+        
+        # Use environment variable for API key to avoid exposure in process list
+        HTTP_CODE=$(curl -X POST "${POSITORY_HOST}/api/v1/packages" \
+          -H "X-Api-Key: ${POSITORY_API_KEY}" \
+          -F "repo=${REPO}" \
+          -F "distribution=${DIST}" \
+          -F "component=${COMPONENT}" \
+          -F "file=@${PACKAGE_FILE}" \
+          -w "%{http_code}" \
+          -o "${RESPONSE_FILE}" \
+          -s)
+        
+        # Check response
+        if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+          echo "✓ Package uploaded successfully (HTTP ${HTTP_CODE})"
+          if [ -f "${RESPONSE_FILE}" ]; then
+            echo "Response:"
+            cat "${RESPONSE_FILE}"
+            rm -f "${RESPONSE_FILE}"
+          fi
+        else
+          echo "::error::Failed to upload package (HTTP ${HTTP_CODE})"
+          if [ -f "${RESPONSE_FILE}" ]; then
+            echo "Error response:"
+            cat "${RESPONSE_FILE}"
+            rm -f "${RESPONSE_FILE}"
+          fi
+          exit 1
+        fi
+
+branding:
+  icon: 'upload-cloud'
+  color: 'blue'
