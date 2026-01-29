@@ -27,6 +27,11 @@
     "ar-async": "^0.1.4",
     "argon2": "^0.41.1",
     "fastify": "^5.3.2",
+    "next": "^16.1.6",
+    "react": "^19.2.4",
+    "recharts": "^3.7.0",
+    "swr": "^2.3.8",
+    "tailwindcss": "^4.1.18",
     "yaml": "^2.7.0"
   },
   "devDependencies": {
