@@ -3,6 +3,7 @@ import { StorageService, PackageMetadata } from "../services/storage.js";
 import crypto from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
+import child_process from "node:child_process";
 
 interface AptRepoParams {
   repo: string;
@@ -177,23 +178,121 @@ export function registerAptRoutes(
   storage: StorageService,
   dataRoot: string
 ): void {
+  const cacheRoot = path.join(dataRoot, ".apt-cache");
+  if (!fs.existsSync(cacheRoot)) fs.mkdirSync(cacheRoot, { recursive: true });
+
+  const signingEnabled = process.env.POSITORY_ENABLE_APT_SIGNING === "1" || process.env.POSITORY_ENABLE_APT_SIGNING === "true";
+
+  // Invalidate cache when storage index changes
+  try {
+    storage.events.on("indexChanged", ({ repo, distribution }: { repo: string; distribution: string }) => {
+      try {
+        const d = path.join(cacheRoot, repo, distribution);
+        if (fs.existsSync(d)) {
+          fs.rmSync(d, { recursive: true, force: true });
+        }
+      } catch {}
+    });
+  } catch {}
+
+  function getCacheDir(repo: string, distribution: string) {
+    return path.join(cacheRoot, repo, distribution);
+  }
+
+  function writeReleaseAndSign(repo: string, distribution: string, content: string) {
+    const dir = getCacheDir(repo, distribution);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    const releasePath = path.join(dir, "Release");
+    fs.writeFileSync(releasePath, content, "utf-8");
+
+    if (!signingEnabled) return;
+
+    try {
+      // Clearsigned InRelease
+      child_process.execSync("gpg --batch --yes --clearsign --output InRelease Release", { cwd: dir, stdio: "ignore" });
+    } catch (err) {
+      // best-effort: ignore signing errors
+    }
+
+    try {
+      // Detached Release.gpg
+      child_process.execSync("gpg --batch --yes --output Release.gpg --detach-sign Release", { cwd: dir, stdio: "ignore" });
+    } catch (err) {
+      // ignore
+    }
+  }
   // Release file (unsigned) — no auth required
   app.get<{ Params: AptRepoParams }>(
     "/apt/:repo/dists/:distribution/Release",
     async (request, reply) => {
       const { repo, distribution } = request.params;
 
-      const packages = storage.listPackages({ repo, distribution });
-
-      if (packages.length === 0) {
-        // Still produce a valid (empty) Release for the distribution
+      // Try cache first
+      const cacheDir = getCacheDir(repo, distribution);
+      const cachedRelease = path.join(cacheDir, "Release");
+      if (fs.existsSync(cachedRelease)) {
+        const content = fs.readFileSync(cachedRelease, "utf-8");
+        return reply.header("Content-Type", "text/plain; charset=utf-8").send(content);
       }
 
+      const packages = storage.listPackages({ repo, distribution });
       const content = generateReleaseContent(repo, distribution, packages, dataRoot);
 
-      reply
-        .header("Content-Type", "text/plain; charset=utf-8")
-        .send(content);
+      // Write to cache and attempt signing if enabled
+      writeReleaseAndSign(repo, distribution, content);
+
+      reply.header("Content-Type", "text/plain; charset=utf-8").send(content);
+    }
+  );
+
+  // InRelease (clearsigned) — optional
+  app.get<{ Params: AptRepoParams }>(
+    "/apt/:repo/dists/:distribution/InRelease",
+    async (request, reply) => {
+      const { repo, distribution } = request.params;
+      const cacheDir = getCacheDir(repo, distribution);
+      const inRelease = path.join(cacheDir, "InRelease");
+      if (fs.existsSync(inRelease)) {
+        return reply.header("Content-Type", "text/plain; charset=utf-8").send(fs.readFileSync(inRelease));
+      }
+
+      // Fallback: generate Release (and signing) then serve clearsigned if created
+      const packages = storage.listPackages({ repo, distribution });
+      const content = generateReleaseContent(repo, distribution, packages, dataRoot);
+      writeReleaseAndSign(repo, distribution, content);
+
+      if (fs.existsSync(inRelease)) {
+        return reply.header("Content-Type", "text/plain; charset=utf-8").send(fs.readFileSync(inRelease));
+      }
+
+      // If still not available, serve unsigned Release
+      reply.header("Content-Type", "text/plain; charset=utf-8").send(content);
+    }
+  );
+
+  // Release.gpg (detached signature)
+  app.get<{ Params: AptRepoParams }>(
+    "/apt/:repo/dists/:distribution/Release.gpg",
+    async (request, reply) => {
+      const { repo, distribution } = request.params;
+      const cacheDir = getCacheDir(repo, distribution);
+      const sig = path.join(cacheDir, "Release.gpg");
+      if (fs.existsSync(sig)) {
+        const buf = fs.readFileSync(sig);
+        return reply.header("Content-Type", "application/octet-stream").send(buf);
+      }
+
+      // Attempt to generate and sign
+      const packages = storage.listPackages({ repo, distribution });
+      const content = generateReleaseContent(repo, distribution, packages, dataRoot);
+      writeReleaseAndSign(repo, distribution, content);
+
+      if (fs.existsSync(sig)) {
+        return reply.header("Content-Type", "application/octet-stream").send(fs.readFileSync(sig));
+      }
+
+      reply.code(404).send({ error: "Signature not available" });
     }
   );
 

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
+import { EventEmitter } from "node:events";
 
 export interface PackageMetadata {
   name: string;
@@ -34,6 +35,7 @@ export interface PackageIndex {
 export class StorageService {
   private dataRoot: string;
   private indexCache: Map<string, PackageIndex> = new Map();
+  public events: EventEmitter = new EventEmitter();
 
   constructor(dataRoot: string) {
     this.dataRoot = dataRoot;
@@ -141,6 +143,13 @@ export class StorageService {
     }
     this.saveIndex(loc.repo, index);
 
+    // Notify listeners that the index changed for this repo
+    try {
+      this.events.emit("indexChanged", { repo: loc.repo, distribution: loc.distribution });
+    } catch {
+      // no-op
+    }
+
     return metadata;
   }
 
@@ -189,6 +198,10 @@ export class StorageService {
 
     // Clean up empty parent directories
     this.cleanEmptyDirs(path.dirname(pkgPath));
+
+    try {
+      this.events.emit("indexChanged", { repo: loc.repo, distribution: loc.distribution });
+    } catch {}
 
     return true;
   }
