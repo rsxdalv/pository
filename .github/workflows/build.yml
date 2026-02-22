@@ -83,3 +83,20 @@ jobs:
           name: debian-packages-${{ github.sha }}
           path: dist/*.deb
           retention-days: 14
+
+      - name: Upload to Pository
+        id: upload
+        uses: rsxdalv/pository@main
+        with:
+          host: ${{ secrets.POSITORY_URL }}
+          api-key: ${{ secrets.POSITORY_API_KEY }}
+          file: dist/*.deb
+          repo: 'default'
+          distribution: 'stable'
+          component: 'main'
+
+      - name: Show upload results
+        run: |
+          echo "Package: ${{ steps.upload.outputs.package-name }}"
+          echo "Version: ${{ steps.upload.outputs.package-version }}"
+          echo "Architecture: ${{ steps.upload.outputs.package-architecture }}"
