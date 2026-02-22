@@ -205,6 +205,34 @@ All configuration options can be overridden with environment variables:
             metadata.json
 ```
 
+## Using as an apt Repository
+
+Pository exposes a standard apt repository interface under `/apt/<repo>/`. This lets you add it as a PPA and install packages with `apt install`.
+
+For full details and advanced configuration see [APT.md](APT.md).
+
+### Quick Setup
+
+```bash
+# 1. Add the repository (trusted — no GPG key required)
+echo "deb [trusted=yes] https://pository.example.com/apt/default stable main" \
+  | sudo tee /etc/apt/sources.list.d/pository.list
+
+# 2. Update package lists
+sudo apt-get update
+
+# 3. Install a package from the repository
+sudo apt-get install mypackage
+```
+
+### Available apt Endpoints (no authentication required)
+
+| Path | Description |
+|------|-------------|
+| `/apt/:repo/dists/:distribution/Release` | Distribution Release file |
+| `/apt/:repo/dists/:distribution/:component/binary-:arch/Packages` | Package index |
+| `/apt/:repo/pool/:distribution/:component/:arch/:name_:version_:arch.deb` | Package download |
+
 ## GitHub Actions Integration
 
 ### Using the Pository Action
@@ -217,7 +245,7 @@ This repository provides a reusable GitHub Action for uploading Debian packages 
   with:
     host: ${{ secrets.POSITORY_URL }}
     api-key: ${{ secrets.POSITORY_API_KEY }}
-    file: path/to/package.deb
+    file: dist/*.deb          # single file, glob pattern, or newline list
     repo: 'default'           # optional, defaults to 'default'
     distribution: 'stable'    # optional, defaults to 'stable'
     component: 'main'         # optional, defaults to 'main'
@@ -226,17 +254,18 @@ This repository provides a reusable GitHub Action for uploading Debian packages 
 **Inputs:**
 - `host` (required): URL of your Pository instance (e.g., `https://pository.example.com`)
 - `api-key` (required): API key with write permission
-- `file` (required): Path to the Debian package file to upload
+- `file` (required): Path(s) to the Debian package file(s) to upload. Accepts a single path, a glob pattern (e.g. `dist/*.deb`), or a newline-separated list. **All** matching files are uploaded.
 - `repo` (optional): Repository name, defaults to `default`
 - `distribution` (optional): Distribution name, defaults to `stable`
 - `component` (optional): Component name, defaults to `main`
 
 **Outputs:**
-- `package-name`: Name of the uploaded package
-- `package-version`: Version of the uploaded package
-- `package-architecture`: Architecture of the uploaded package
+- `package-name`: Name of the last uploaded package
+- `package-version`: Version of the last uploaded package
+- `package-architecture`: Architecture of the last uploaded package
+- `packages-uploaded`: Total number of packages successfully uploaded
 
-**Security Note:** Always store your Pository URL and API key as GitHub secrets for additional security.
+**Security Note:** Always store your Pository URL and API key as GitHub secrets.
 
 ### Example Workflow
 

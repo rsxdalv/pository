@@ -1,6 +1,6 @@
 # Pository GitHub Action
 
-A GitHub Action for uploading Debian packages to a Pository instance.
+A GitHub Action for uploading one or more Debian packages to a Pository instance.
 
 ## Usage
 
@@ -10,7 +10,7 @@ A GitHub Action for uploading Debian packages to a Pository instance.
   with:
     host: ${{ secrets.POSITORY_URL }}
     api-key: ${{ secrets.POSITORY_API_KEY }}
-    file: path/to/package.deb
+    file: dist/*.deb          # single file, glob, or newline-separated list
     repo: 'default'           # optional, defaults to 'default'
     distribution: 'stable'    # optional, defaults to 'stable'
     component: 'main'         # optional, defaults to 'main'
@@ -22,7 +22,7 @@ A GitHub Action for uploading Debian packages to a Pository instance.
 |-------|----------|---------|-------------|
 | `host` | Yes | - | URL of your Pository instance (e.g., `https://pository.example.com`) |
 | `api-key` | Yes | - | API key with write permission |
-| `file` | Yes | - | Path to the Debian package file to upload. Supports glob patterns (e.g., `dist/*.deb`). If multiple files match, the first one is used. |
+| `file` | Yes | - | Path(s) to Debian package file(s) to upload. Accepts a single path, a glob pattern (e.g. `dist/*.deb`), or a newline-separated list of paths/patterns. **All** matching files are uploaded. |
 | `repo` | No | `default` | Repository name |
 | `distribution` | No | `stable` | Distribution name (e.g., stable, unstable) |
 | `component` | No | `main` | Component name (e.g., main, contrib) |
@@ -31,9 +31,10 @@ A GitHub Action for uploading Debian packages to a Pository instance.
 
 | Output | Description |
 |--------|-------------|
-| `package-name` | Name of the uploaded package |
-| `package-version` | Version of the uploaded package |
-| `package-architecture` | Architecture of the uploaded package |
+| `package-name` | Name of the **last** uploaded package |
+| `package-version` | Version of the last uploaded package |
+| `package-architecture` | Architecture of the last uploaded package |
+| `packages-uploaded` | Total number of packages successfully uploaded |
 
 ## Security Best Practices
 
@@ -101,9 +102,45 @@ jobs:
       
       - name: Show upload results
         run: |
-          echo "Uploaded: ${{ steps.upload.outputs.package-name }}"
-          echo "Version: ${{ steps.upload.outputs.package-version }}"
-          echo "Architecture: ${{ steps.upload.outputs.package-architecture }}"
+          echo "Packages uploaded: ${{ steps.upload.outputs.packages-uploaded }}"
+          echo "Last package name: ${{ steps.upload.outputs.package-name }}"
+          echo "Last package version: ${{ steps.upload.outputs.package-version }}"
+          echo "Last package arch: ${{ steps.upload.outputs.package-architecture }}"
+```
+
+### Uploading Multiple Packages by Pattern
+
+```yaml
+      - name: Upload all packages to Pository
+        id: upload
+        uses: rsxdalv/pository@main
+        with:
+          host: ${{ secrets.POSITORY_URL }}
+          api-key: ${{ secrets.POSITORY_API_KEY }}
+          file: dist/*.deb      # uploads every .deb in dist/
+          repo: 'default'
+          distribution: 'stable'
+          component: 'main'
+      
+      - name: Show upload results
+        run: echo "Uploaded ${{ steps.upload.outputs.packages-uploaded }} package(s)"
+```
+
+### Uploading Multiple Packages by Explicit List
+
+```yaml
+      - name: Upload selected packages
+        uses: rsxdalv/pository@main
+        with:
+          host: ${{ secrets.POSITORY_URL }}
+          api-key: ${{ secrets.POSITORY_API_KEY }}
+          file: |
+            dist/myapp_1.0.0_amd64.deb
+            dist/myapp_1.0.0_arm64.deb
+            dist/myapp-dev_1.0.0_all.deb
+          repo: 'default'
+          distribution: 'stable'
+          component: 'main'
 ```
 
 ## Error Handling
