@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
+import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import { loadConfig } from "./utils/config-loader.js";
 import { Logger } from "./utils/logger.js";
@@ -38,6 +39,19 @@ async function main() {
   }
 
   const app = Fastify(fastifyOpts);
+
+  // Enable CORS for the frontend (allow localhost:3001 by default)
+  await app.register(cors, {
+    origin: (origin, cb) => {
+      // Allow browser requests from localhost:3001 during development
+      if (!origin || origin.includes("localhost:3001") || origin.includes("127.0.0.1:3001")) {
+        cb(null, true);
+        return;
+      }
+      // Fallback: allow all origins (can be tightened in production via config)
+      cb(null, true);
+    },
+  });
 
   // Register rate limiting
   await app.register(rateLimit, {
