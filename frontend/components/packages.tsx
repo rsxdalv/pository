@@ -37,7 +37,7 @@ export function Packages() {
   const [deletingPackage, setDeletingPackage] = useState<string | null>(null);
 
   const { data, mutate } = useSWR(
-    apiKey ? ["packages", filters] : null,
+    apiKey ? ["packages-list", apiKey, filters] : null,
     () =>
       api?.listPackages(
         Object.fromEntries(

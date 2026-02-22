@@ -30,7 +30,7 @@ export function ApiKeys() {
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
 
   const { data, mutate, error } = useSWR(
-    apiKey ? "keys" : null,
+    apiKey ? ["keys", apiKey] : null,
     () => api?.listKeys(),
     { refreshInterval: 10000 }
   );
@@ -40,7 +40,10 @@ export function ApiKeys() {
   }
 
   const keys = data?.keys || [];
-  const hasPermission = error?.message !== "Admin permission required";
+  // Show "admin required" screen for 403, and "invalid key" screen for 401
+  const isPermissionError = error?.message === "Admin permission required";
+  const isAuthError = error?.message === "Invalid API key" || error?.message === "Missing API key";
+  const hasPermission = !isPermissionError && !isAuthError;
 
   const handleCreate = async () => {
     if (!newKey.description.trim()) {
@@ -93,10 +96,12 @@ export function ApiKeys() {
           />
         </svg>
         <h3 className="mt-4 text-lg font-semibold text-foreground">
-          Admin Access Required
+          {isAuthError ? "Invalid API Key" : "Admin Access Required"}
         </h3>
         <p className="mt-2 text-sm text-muted-foreground">
-          You need admin permissions to manage API keys
+          {isAuthError
+            ? "The API key you entered was rejected. Please check the key value and try again."
+            : "You need admin permissions to manage API keys"}
         </p>
       </div>
     );

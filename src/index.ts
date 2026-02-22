@@ -10,6 +10,7 @@ import { createAuthMiddleware } from "./middleware/auth.js";
 import { registerPackageRoutes } from "./routes/packages.js";
 import { registerKeyRoutes } from "./routes/keys.js";
 import { registerHealthRoutes, trackRequest } from "./routes/health.js";
+import { registerAptRoutes } from "./routes/apt.js";
 import fs from "node:fs";
 
 async function main() {
@@ -101,11 +102,12 @@ async function main() {
   // Register auth middleware for API routes
   const authMiddleware = createAuthMiddleware(apiKeyService);
   app.addHook("preHandler", async (request, reply) => {
-    // Skip auth for health endpoints
+    // Skip auth for health endpoints and public apt repository routes
     if (
       request.url === "/healthz" ||
       request.url === "/readyz" ||
-      request.url === "/metrics"
+      request.url === "/metrics" ||
+      request.url.startsWith("/apt/")
     ) {
       return;
     }
@@ -117,6 +119,7 @@ async function main() {
   registerHealthRoutes(app, storage);
   registerPackageRoutes(app, storage, apiKeyService, logger, config);
   registerKeyRoutes(app, apiKeyService, logger);
+  registerAptRoutes(app, storage, config.dataRoot);
 
   // Start server
   try {

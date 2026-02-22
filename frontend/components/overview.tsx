@@ -18,26 +18,37 @@ function formatBytes(bytes: number): string {
 export function Overview() {
   const { apiKey, api } = useApiKey();
 
-  const { data: packagesData } = useSWR(
-    apiKey ? "packages" : null,
+  const { data: packagesData, error: packagesError } = useSWR(
+    apiKey ? ["packages", apiKey] : null,
     () => api?.listPackages(),
     { refreshInterval: 5000 }
   );
 
   const { data: metricsText } = useSWR(
-    apiKey ? "metrics" : null,
+    apiKey ? ["metrics", apiKey] : null,
     () => api?.getMetrics(),
     { refreshInterval: 5000 }
   );
 
   const { data: readiness } = useSWR(
-    apiKey ? "readiness" : null,
+    apiKey ? ["readiness", apiKey] : null,
     () => api?.getReadiness(),
     { refreshInterval: 10000 }
   );
 
   if (!apiKey) {
     return <ApiKeyPrompt />;
+  }
+
+  if (packagesError) {
+    return (
+      <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6">
+        <p className="font-medium text-destructive">Failed to load data</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {packagesError.message || "Check that your API key is valid and has at least read access."}
+        </p>
+      </div>
+    );
   }
 
   const packages = packagesData?.packages || [];

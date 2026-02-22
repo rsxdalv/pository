@@ -6,6 +6,7 @@ import { PositoryAPI } from "./api";
 interface ApiKeyContextType {
   apiKey: string | null;
   setApiKey: (key: string) => void;
+  clearApiKey: () => void;
   api: PositoryAPI | null;
 }
 
@@ -26,10 +27,15 @@ export function ApiKeyProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("pository_api_key", key);
   };
 
+  const clearApiKey = () => {
+    setApiKeyState(null);
+    localStorage.removeItem("pository_api_key");
+  };
+
   const api = apiKey ? new PositoryAPI(apiKey) : null;
 
   return (
-    <ApiKeyContext.Provider value={{ apiKey, setApiKey, api }}>
+    <ApiKeyContext.Provider value={{ apiKey, setApiKey, clearApiKey, api }}>
       {children}
     </ApiKeyContext.Provider>
   );
