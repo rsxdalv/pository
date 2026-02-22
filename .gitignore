@@ -12,5 +12,6 @@ debian/files
 debian/*.substvars
 debian/*.debhelper
 debian/pository/
+debian/pository-frontend/
 *.buildinfo
 *.changes

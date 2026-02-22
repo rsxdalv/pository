@@ -33,6 +33,13 @@ apiKeysPath: /etc/pository/api-keys.json
 # WARNING: Change this in production!
 # adminKey: your-secret-admin-key
 
+# CORS allowed origins for the web dashboard
+# Comma-separated list; if empty, only localhost / 127.0.0.1 origins are allowed.
+# Set to the public URL of your pository-frontend instance in production.
+# Can also be set via POSITORY_CORS_ORIGINS env var (comma-separated).
+# corsOrigins:
+#   - https://pository.example.com
+
 # Retention policy (optional)
 retention:
   enabled: false

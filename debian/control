@@ -9,7 +9,16 @@ Homepage: https://github.com/rsxdalv/pository
 Package: pository
 Architecture: all
 Depends: nodejs (>= 20)
+Suggests: pository-frontend
 Description: Lightweight Debian package artifact repository
  Pository is a minimal, self-hosted artifact repository for Debian packages.
  It provides REST API for uploading, downloading, listing, and deleting
  Debian packages with API key authentication and role-based access control.
+
+Package: pository-frontend
+Architecture: all
+Depends: nodejs (>= 20), pository
+Description: Web dashboard for the Pository package repository
+ A Next.js web dashboard for managing a Pository instance. Provides a
+ browser-based UI for browsing packages, viewing metrics, and managing
+ API keys. Runs as a separate systemd service on port 3001 by default.

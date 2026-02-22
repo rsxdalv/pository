@@ -40,16 +40,21 @@ async function main() {
 
   const app = Fastify(fastifyOpts);
 
-  // Enable CORS for the frontend (allow localhost:3001 by default)
+  // Enable CORS - allow origins from config, plus localhost:3001 in dev fallback
+  const extraOrigins = config.corsOrigins;
   await app.register(cors, {
     origin: (origin, cb) => {
-      // Allow browser requests from localhost:3001 during development
-      if (!origin || origin.includes("localhost:3001") || origin.includes("127.0.0.1:3001")) {
+      if (!origin) { cb(null, true); return; } // same-origin / server-to-server
+      if (extraOrigins.length > 0) {
+        cb(null, extraOrigins.includes(origin));
+        return;
+      }
+      // No explicit list configured: allow localhost only (safe development default)
+      if (origin.includes("localhost") || origin.includes("127.0.0.1")) {
         cb(null, true);
         return;
       }
-      // Fallback: allow all origins (can be tightened in production via config)
-      cb(null, true);
+      cb(null, false);
     },
   });
 

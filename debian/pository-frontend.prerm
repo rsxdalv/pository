@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove|purge)
+        systemctl stop pository-frontend.service 2>/dev/null || true
+        systemctl disable pository-frontend.service 2>/dev/null || true
+        ;;
+esac
+
+exit 0

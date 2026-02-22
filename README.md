@@ -33,16 +33,35 @@ npm start
 
 ### Production (Debian Package)
 
+Building produces **two** Debian packages:
+- `pository` — the backend API service (port 3000)
+- `pository-frontend` — the optional web dashboard (port 3001); depends on `pository`
+
 ```bash
-# Build the Debian package
+# Build both Debian packages
 sudo apt-get install -y devscripts debhelper dh-exec
 dpkg-buildpackage -us -uc -b
 
-# Install
+# Install the backend
 sudo dpkg -i ../pository_*.deb
 
-# The service will auto-start and an admin key will be generated
-# Check the admin key in /etc/pository/config.yaml
+# Optionally install the web dashboard
+sudo dpkg -i ../pository-frontend_*.deb
+
+# Admin key is generated at install time
+# Check /etc/pository/config.yaml
+```
+
+**Configuring CORS for the frontend:**  
+If the frontend and backend run on the same host you can leave defaults.  
+For remote or HTTPS deployments, set `corsOrigins` in `/etc/pository/config.yaml`  
+or uncomment `POSITORY_CORS_ORIGINS` in `/etc/default/pository`.  
+
+**Changing the backend URL the dashboard points to:**  
+Edit `/etc/default/pository-frontend`, uncomment `NEXT_PUBLIC_API_URL`, then rebuild:
+```bash
+cd /usr/share/pository-frontend && sudo -u pository npm run build
+sudo systemctl restart pository-frontend
 ```
 
 ## API Reference
@@ -142,6 +161,11 @@ allowedRepos:
   - releases
   - snapshots
 
+# CORS origins allowed to access the API (comma separated)
+# Leave empty to allow only localhost / 127.0.0.1 (safe for co-located installs)
+# corsOrigins:
+#   - https://pository.example.com
+
 # Path to API keys storage
 apiKeysPath: /etc/pository/api-keys.json
 
@@ -165,6 +189,7 @@ All configuration options can be overridden with environment variables:
 | `POSITORY_TLS_CERT` | TLS certificate path |
 | `POSITORY_TLS_KEY` | TLS key path |
 | `POSITORY_MAX_UPLOAD_SIZE` | Max upload size (bytes) |
+| `POSITORY_CORS_ORIGINS` | Comma-separated CORS origins (e.g. `https://pository.example.com`) |
 
 ## Storage Layout
 
@@ -259,3 +284,14 @@ node --import=tsx --test tests/storage.test.ts
 ## License
 
 MIT
+
+**App structure**
+
+- **Root**: project manifest and packaging metadata. See `AGENTS.md` for a short developer-facing map.
+- **Backend (`src/`)**: Fastify-based server. Entry point: `src/index.ts`. Route handlers live in `src/routes/`, core services in `src/services/`, and runtime configuration in `src/config.ts`.
+- **Frontend (`frontend/`)**: Next.js dashboard (App Router) that runs on port `3001` in development. The frontend uses the `NEXT_PUBLIC_API_URL` env var to locate the backend and stores API keys locally in the browser.
+- **Debian packaging (`debian/`)**: Control files, `postinst` and systemd integration used to build production `.deb` packages via `dpkg-buildpackage`.
+- **MCP workflow tools (`mcp-action-workflow/`)**: Helpers for generating GitHub Actions workflows and MCP tooling for the bundled `action.yml`.
+- **Tests (`tests/`)**: Unit and integration tests executed by `npm test`.
+
+If you are an automation agent or maintainer: see `AGENTS.md` for a compact actionable layout and quick run commands.

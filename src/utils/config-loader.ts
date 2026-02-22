@@ -60,6 +60,9 @@ export function loadConfig(configPath?: string): Config {
   if (process.env.POSITORY_MAX_UPLOAD_SIZE) {
     config.maxUploadSize = parseInt(process.env.POSITORY_MAX_UPLOAD_SIZE, 10);
   }
+  if (process.env.POSITORY_CORS_ORIGINS) {
+    config.corsOrigins = process.env.POSITORY_CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean);
+  }
 
   // Ensure directories exist
   ensureDir(config.dataRoot);

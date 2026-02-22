@@ -19,3 +19,7 @@
 # TLS settings
 # POSITORY_TLS_CERT=/etc/pository/server.crt
 # POSITORY_TLS_KEY=/etc/pository/server.key
+
+# Allowed CORS origins for the web dashboard (comma-separated)
+# Set to the URL where pository-frontend is served (e.g. https://pository.example.com)
+# POSITORY_CORS_ORIGINS=http://localhost:3001

@@ -4,15 +4,29 @@
 	dh $@
 
 override_dh_auto_build:
-	# Skip build - TypeScript runs directly with Node.js
+	# Build the Next.js frontend (deps are installed in postinst on target system)
+	# Nothing to compile for the backend - TypeScript runs directly via tsx at runtime
 
 override_dh_auto_test:
 	# Skip tests during package build
 
 override_dh_auto_install:
-	# Install application files
+	# Install backend application files
 	mkdir -p debian/pository/usr/share/pository
 	mkdir -p debian/pository/etc/pository
 	cp -r src debian/pository/usr/share/pository/
 	cp package.json package-lock.json debian/pository/usr/share/pository/
 	cp config.example.yaml debian/pository/etc/pository/config.yaml
+
+	# Install frontend application files
+	mkdir -p debian/pository-frontend/usr/share/pository-frontend
+	cp -r frontend/app frontend/components frontend/lib \
+		debian/pository-frontend/usr/share/pository-frontend/
+	[ -d frontend/public ] && cp -r frontend/public \
+		debian/pository-frontend/usr/share/pository-frontend/ || true
+	cp frontend/package.json frontend/next.config.mjs \
+		frontend/postcss.config.mjs frontend/tailwind.config.ts \
+		frontend/tsconfig.json \
+		debian/pository-frontend/usr/share/pository-frontend/
+	test -f frontend/package-lock.json && \
+		cp frontend/package-lock.json debian/pository-frontend/usr/share/pository-frontend/ || true

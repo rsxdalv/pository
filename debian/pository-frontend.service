@@ -1,0 +1,45 @@
+[Unit]
+Description=Pository Frontend - Web Dashboard
+Documentation=https://github.com/rsxdalv/pository
+After=network.target pository.service
+Wants=pository.service
+
+[Service]
+Type=simple
+User=pository
+Group=pository
+WorkingDirectory=/usr/share/pository-frontend
+
+ExecStart=/usr/bin/node node_modules/.bin/next start --port 3001
+
+# Environment file for frontend runtime settings
+EnvironmentFile=-/etc/default/pository-frontend
+
+# Restart on failure
+Restart=on-failure
+RestartSec=5s
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/usr/share/pository-frontend/.next/cache
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pository-frontend
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,35 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    configure)
+        # pository user is created by the pository package (which we depend on)
+
+        # Install npm dependencies and build the frontend
+        cd /usr/share/pository-frontend
+
+        # Load any pre-configured env (e.g. NEXT_PUBLIC_API_URL) before building
+        if [ -f /etc/default/pository-frontend ]; then
+            # shellcheck disable=SC1091
+            set -a; . /etc/default/pository-frontend; set +a
+        fi
+
+        if [ -f package-lock.json ]; then
+            npm ci || npm install
+        else
+            npm install
+        fi
+
+        npm run build
+
+        # Allow the pository user to write to the Next.js cache
+        chown -R pository:pository /usr/share/pository-frontend/.next
+
+        # Enable and start the frontend service
+        systemctl daemon-reload
+        systemctl enable pository-frontend.service
+        systemctl start pository-frontend.service || true
+        ;;
+esac
+
+exit 0

@@ -33,8 +33,11 @@ export function trackRequest(
   metrics.requestsTotal++;
   metrics.requestsByMethod[method] = (metrics.requestsByMethod[method] || 0) + 1;
   metrics.requestsByStatus[statusCode] = (metrics.requestsByStatus[statusCode] || 0) + 1;
-  metrics.latencySum += latencyMs;
-  metrics.latencyCount++;
+
+  if (Number.isFinite(latencyMs)) {
+    metrics.latencySum += latencyMs;
+    metrics.latencyCount++;
+  }
 
   if (statusCode >= 400) {
     metrics.errorsTotal++;

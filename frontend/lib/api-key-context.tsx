@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { PositoryAPI } from "./api";
 
 interface ApiKeyContextType {
@@ -12,18 +12,18 @@ interface ApiKeyContextType {
 const ApiKeyContext = createContext<ApiKeyContextType | undefined>(undefined);
 
 export function ApiKeyProvider({ children }: { children: ReactNode }) {
-  const [apiKey, setApiKeyState] = useState<string | null>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("pository_api_key");
-    }
-    return null;
-  });
+  // Always start null so server render matches initial client render (no hydration mismatch)
+  const [apiKey, setApiKeyState] = useState<string | null>(null);
+
+  // Load from localStorage after mount (client only)
+  useEffect(() => {
+    const stored = localStorage.getItem("pository_api_key");
+    if (stored) setApiKeyState(stored);
+  }, []);
 
   const setApiKey = (key: string) => {
     setApiKeyState(key);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("pository_api_key", key);
-    }
+    localStorage.setItem("pository_api_key", key);
   };
 
   const api = apiKey ? new PositoryAPI(apiKey) : null;

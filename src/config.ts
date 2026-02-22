@@ -19,6 +19,7 @@ export interface Config {
   retention: RetentionConfig;
   maxUploadSize: number;
   allowedRepos: string[];
+  corsOrigins: string[];
   adminKey?: string;
   apiKeysPath: string;
 }
@@ -36,5 +37,6 @@ export const defaultConfig: Config = {
   },
   maxUploadSize: 100 * 1024 * 1024, // 100MB
   allowedRepos: ["default"],
+  corsOrigins: [],
   apiKeysPath: "/etc/pository/api-keys.json",
 };

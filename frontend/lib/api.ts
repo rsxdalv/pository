@@ -162,7 +162,8 @@ export function parseMetrics(metricsText: string): Metrics {
     } else if (line.startsWith("pository_download_bytes_total ")) {
       metrics.downloadBytes = parseFloat(line.split(" ")[1]);
     } else if (line.startsWith("pository_request_latency_ms_avg ")) {
-      metrics.avgLatency = parseFloat(line.split(" ")[1]);
+      const v = parseFloat(line.split(" ")[1]);
+      metrics.avgLatency = Number.isFinite(v) ? v : 0;
     } else if (line.includes('pository_requests_by_method{method="')) {
       const match = line.match(/method="([^"]+)"\} (\d+)/);
       if (match) {
@@ -171,7 +172,7 @@ export function parseMetrics(metricsText: string): Metrics {
     } else if (line.includes('pository_requests_by_status{status="')) {
       const match = line.match(/status="([^"]+)"\} (\d+)/);
       if (match) {
-        metrics.requestsByStatus[match[1]] = parseFloat(match[2]);
+        metrics.requestsByStatus[parseInt(match[1], 10)] = parseFloat(match[2]);
       }
     }
   }

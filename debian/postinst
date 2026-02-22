@@ -27,20 +27,21 @@ case "$1" in
         # Initialize API keys file if not exists
         if [ ! -f /etc/pository/api-keys.json ]; then
             echo '{"keys":[]}' > /etc/pository/api-keys.json
-            chown pository:pository /etc/pository/api-keys.json
-            chmod 640 /etc/pository/api-keys.json
         fi
+        # Ensure pository user owns and can write the keys file
+        chown pository:pository /etc/pository/api-keys.json
+        chmod 640 /etc/pository/api-keys.json
         
         # Install npm dependencies (use ci for reproducibility if lock file exists)
         cd /usr/share/pository
         if [ -f package-lock.json ]; then
-            npm ci --production --omit=dev || npm install --production --omit=dev
+            npm ci --omit=dev || npm install --omit=dev
         else
-            npm install --production --omit=dev
+            npm install --omit=dev
         fi
         
         # Generate initial admin key if not configured
-        if ! grep -q "adminKey:" /etc/pository/config.yaml 2>/dev/null && \
+        if ! grep -q "^adminKey:" /etc/pository/config.yaml 2>/dev/null && \
            [ -z "${POSITORY_ADMIN_KEY:-}" ]; then
             ADMIN_KEY=$(head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
             echo ""

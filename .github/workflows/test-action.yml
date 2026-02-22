@@ -29,22 +29,29 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y devscripts debhelper dh-exec
       
-      - name: Install npm dependencies
+      - name: Install backend npm dependencies
         run: npm ci
       
-      - name: Build Debian package
+      - name: Install frontend npm dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Build both Debian packages
         run: |
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
           mv ../pository_*.deb dist/
+          mv ../pository-frontend_*.deb dist/
+          ls -lh dist/
       
-      - name: Get package filename
+      - name: Get backend package filename
         id: package
         run: |
-          DEB_FILE=$(ls dist/*.deb | head -1)
+          DEB_FILE=$(ls dist/pository_*.deb)
           echo "file=$DEB_FILE" >> $GITHUB_OUTPUT
           echo "filename=$(basename $DEB_FILE)" >> $GITHUB_OUTPUT
-          echo "Package built: $(basename $DEB_FILE)"
+          echo "Backend package: $(basename $DEB_FILE)"
+          echo "Frontend package: $(basename dist/pository-frontend_*.deb)"
       
       - name: Verify action.yml structure
         run: |
@@ -113,8 +120,8 @@ jobs:
           distribution: 'unstable'
           component: 'main'
       
-      - name: Upload test package as artifact
+      - name: Upload packages as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: test-debian-package
+          name: debian-packages
           path: dist/*.deb
