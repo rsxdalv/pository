@@ -45,7 +45,7 @@ export interface Metrics {
   avgLatency: number;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3222";
 
 export class PositoryAPI {
   private apiKey: string;

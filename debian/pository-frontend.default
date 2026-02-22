@@ -4,10 +4,10 @@
 # Override the backend API URL used by the dashboard
 # NOTE: This variable is baked in at build time. If you change it after
 # installation, re-run: cd /usr/share/pository-frontend && npm run build
-# NEXT_PUBLIC_API_URL=http://localhost:3000
+# NEXT_PUBLIC_API_URL=http://localhost:3222
 
-# Override the frontend port (default: 3001)
-# PORT=3001
+# Override the frontend port (default: 3223)
+# PORT=3223
 
 # Hostname to bind to (default: 0.0.0.0)
 # HOSTNAME=0.0.0.0

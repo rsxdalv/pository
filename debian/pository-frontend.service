@@ -10,7 +10,7 @@ User=pository
 Group=pository
 WorkingDirectory=/usr/share/pository-frontend
 
-ExecStart=/usr/bin/node node_modules/.bin/next start --port 3001
+ExecStart=/usr/bin/node node_modules/.bin/next start --port 3223
 
 # Environment file for frontend runtime settings
 EnvironmentFile=-/etc/default/pository-frontend

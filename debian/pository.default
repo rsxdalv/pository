@@ -11,7 +11,7 @@
 # POSITORY_LOG_PATH=/var/log/pository
 
 # Override port
-# POSITORY_PORT=3000
+# POSITORY_PORT=3222
 
 # Override bind address
 # POSITORY_BIND_ADDRESS=0.0.0.0
@@ -22,4 +22,4 @@
 
 # Allowed CORS origins for the web dashboard (comma-separated)
 # Set to the URL where pository-frontend is served (e.g. https://pository.example.com)
-# POSITORY_CORS_ORIGINS=http://localhost:3001
+# POSITORY_CORS_ORIGINS=http://localhost:3223

@@ -27,7 +27,7 @@ export interface Config {
 export const defaultConfig: Config = {
   dataRoot: "/var/lib/pository",
   logPath: "/var/log/pository",
-  port: 3000,
+  port: 3222,
   bindAddress: "0.0.0.0",
   tls: {
     enabled: false,
