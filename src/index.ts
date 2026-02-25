@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // MCP server exposing helpers to generate a GitHub Actions workflow
-// that uses ./action.yml to push Debian packages to Pository and to
+// that uses rsxdalv/pository@main to push Debian packages to Pository and to
 // print gh-secret commands for required secrets.
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -15,7 +15,6 @@ const server = new McpServer({
 const workflowSchema = z.object({
   workflowName: z.string().optional(),
   workflowFile: z.string().optional(),
-  actionPath: z.string().optional(),
   packagePath: z.string().optional(),
   repo: z.string().optional(),
   distribution: z.string().optional(),
@@ -27,18 +26,17 @@ const workflowSchema = z.object({
 server.registerTool(
   'generate_github_workflow',
   {
-    description: 'Generate a GitHub Actions workflow that uses ./action.yml to push a Debian package to Pository.',
+    description: 'Generate a GitHub Actions workflow that uses rsxdalv/pository@main to push a Debian package to Pository.',
     inputSchema: workflowSchema
   },
   async (input: z.infer<typeof workflowSchema>) => {
     const workflowName = input.workflowName?.trim() || 'Upload Debian package to Pository';
     const workflowFile = input.workflowFile?.trim() || '.github/workflows/push-to-pository.yml';
-    const actionPath = input.actionPath?.trim() || './';
     const packagePath = input.packagePath?.trim() || 'dist/*.deb';
     const repo = input.repo?.trim() || 'default';
     const distribution = input.distribution?.trim() || 'stable';
     const component = input.component?.trim() || 'main';
-    const hostSecret = input.hostSecret?.trim() || 'POSITORY_HOST';
+    const hostSecret = input.hostSecret?.trim() || 'POSITORY_URL';
     const apiKeySecret = input.apiKeySecret?.trim() || 'POSITORY_API_KEY';
 
     const workflowYaml = `name: ${workflowName}
@@ -58,8 +56,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Upload package to Pository
-        uses: ${actionPath}
+      - name: Upload to Pository
+        id: upload
+        uses: rsxdalv/pository@main
         with:
           host: \${{ secrets.${hostSecret} }}
           api-key: \${{ secrets.${apiKeySecret} }}
@@ -67,6 +66,13 @@ jobs:
           repo: ${repo}
           distribution: ${distribution}
           component: ${component}
+
+      - name: Show upload results
+        run: |
+          echo "Packages uploaded: \${{ steps.upload.outputs.packages-uploaded }}"
+          echo "Last package name: \${{ steps.upload.outputs.package-name }}"
+          echo "Last package version: \${{ steps.upload.outputs.package-version }}"
+          echo "Last package arch: \${{ steps.upload.outputs.package-architecture }}"
 `;
 
     const content = [
@@ -91,7 +97,7 @@ server.registerTool(
     inputSchema: secretSchema
   },
   async (input: z.infer<typeof secretSchema>) => {
-    const hostSecret = input.hostSecret?.trim() || 'POSITORY_HOST';
+    const hostSecret = input.hostSecret?.trim() || 'POSITORY_URL';
     const apiKeySecret = input.apiKeySecret?.trim() || 'POSITORY_API_KEY';
     const env = input.env?.trim();
     const org = input.org?.trim();
