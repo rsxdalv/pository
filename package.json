@@ -1,21 +1,20 @@
 {
   "name": "pository",
   "version": "0.1.0",
-  "description": "A lightweight Debian package artifact repository",
-  "main": "src/index.ts",
+  "description": "MCP server that generates GitHub Actions workflows for pushing Debian packages to Pository",
   "type": "module",
+  "bin": "dist/index.js",
   "scripts": {
-    "start": "node --import=tsx src/index.ts",
-    "dev": "node --import=tsx --watch src/index.ts",
-    "build": "tsc --noEmit",
-    "test": "node --import=tsx --test tests/storage.test.ts tests/api-keys.test.ts tests/debian-validator.test.ts tests/integration.test.ts",
-    "lint": "eslint src tests --ext .ts"
+    "build": "tsc",
+    "prepare": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
   },
   "keywords": [
+    "mcp",
     "debian",
-    "package",
-    "repository",
-    "artifact"
+    "pository",
+    "github-actions"
   ],
   "author": "",
   "license": "MIT",
@@ -23,20 +22,12 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@fastify/cors": "^11.2.0",
-    "@fastify/multipart": "^9.1.0",
-    "@fastify/rate-limit": "^10.3.0",
-    "ar-async": "^0.1.4",
-    "argon2": "^0.41.1",
-    "fastify": "^5.3.2",
-    "tsx": "^4.19.4",
-    "yaml": "^2.7.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@eslint/js": "^9.26.0",
-    "@types/node": "^22.15.2",
-    "eslint": "^9.26.0",
-    "typescript": "^5.8.2",
-    "typescript-eslint": "^8.31.1"
+    "@types/node": "^25.0.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
   }
 }
