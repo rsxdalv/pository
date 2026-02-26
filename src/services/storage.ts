@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
+import { execFileSync } from "node:child_process";
 
 export interface PackageMetadata {
   name: string;
@@ -29,6 +30,15 @@ export interface PackageMetadata {
   // Only stored when the deb's control explicitly declares it, so we don't
   // emit a synthetic value that would diverge from dpkg/status.
   installedSize?: number;
+  // Additional relationship and metadata fields from the deb control file.
+  // Pre-Depends, Conflicts, Breaks, Replaces are all apt VersionHash-relevant;
+  // Suggests and Provides are included for completeness.
+  preDepends?: string;
+  suggests?: string;
+  conflicts?: string;
+  breaks?: string;
+  replaces?: string;
+  provides?: string;
 }
 
 export interface PackageLocation {
@@ -43,6 +53,12 @@ export interface PackageLocation {
 export interface PackageIndex {
   packages: PackageMetadata[];
 }
+
+/** The subset of PackageMetadata that originates from the deb's control file. */
+export type DebControlMeta = Pick<PackageMetadata,
+  "description" | "multiArch" | "maintainer" | "depends" | "preDepends" |
+  "suggests" | "conflicts" | "breaks" | "replaces" | "provides" |
+  "homepage" | "section" | "priority" | "installedSize">;
 
 export class StorageService {
   private dataRoot: string;
@@ -71,6 +87,16 @@ export class StorageService {
     return path.join(this.dataRoot, repo, "index.json");
   }
 
+  /**
+   * Load (and cache) the package index for a repo.
+   *
+   * On first load, any entries whose `description` field is missing are
+   * healed by reading the corresponding .deb with `dpkg-deb`.  This makes
+   * the service self-repairing: packages uploaded before control-metadata
+   * extraction was implemented are transparently back-filled the first time
+   * the index is accessed after a service restart — no manual migration
+   * scripts are needed.
+   */
   private loadIndex(repo: string): PackageIndex {
     const cached = this.indexCache.get(repo);
     if (cached) return cached;
@@ -79,7 +105,31 @@ export class StorageService {
     if (fs.existsSync(indexPath)) {
       const content = fs.readFileSync(indexPath, "utf-8");
       const index = JSON.parse(content) as PackageIndex;
-      this.indexCache.set(repo, index);
+
+      // Self-heal: backfill control fields from .deb for any entries that
+      // pre-date the upload-time extraction logic.
+      let healed = false;
+      for (let i = 0; i < index.packages.length; i++) {
+        const pkg = index.packages[i];
+        if (!pkg.description) {
+          const debPath = path.join(this.getPackagePath(pkg), "package.deb");
+          const fields = this.extractDebControl(debPath);
+          if (fields) {
+            index.packages[i] = { ...pkg, ...fields };
+            try {
+              const metaPath = path.join(this.getPackagePath(pkg), "metadata.json");
+              fs.writeFileSync(metaPath, JSON.stringify(index.packages[i], null, 2));
+            } catch { /* best-effort */ }
+            healed = true;
+          }
+        }
+      }
+
+      if (healed) {
+        this.saveIndex(repo, index);
+      } else {
+        this.indexCache.set(repo, index);
+      }
       return index;
     }
 
@@ -102,7 +152,7 @@ export class StorageService {
     loc: PackageLocation,
     fileBuffer: Buffer,
     uploaderKeyId: string,
-    controlExtra?: Partial<Pick<PackageMetadata, "description" | "multiArch" | "maintainer" | "depends" | "homepage" | "section" | "priority" | "installedSize">>
+    controlExtra?: Partial<DebControlMeta>
   ): Promise<PackageMetadata> {
     const pkgPath = this.getPackagePath(loc);
     const debPath = path.join(pkgPath, "package.deb");
@@ -119,6 +169,18 @@ export class StorageService {
     // Write file
     await pipeline(Readable.from(fileBuffer), fs.createWriteStream(debPath));
 
+    // If the built-in control parser could not extract metadata (e.g. for
+    // xz/zstd-compressed control archives), fall back to dpkg-deb on the
+    // file we just wrote.  This ensures every upload stores complete metadata
+    // without requiring an external backfill step.
+    let resolvedExtra = controlExtra;
+    if (!resolvedExtra?.description) {
+      const extracted = this.extractDebControl(debPath);
+      if (extracted) {
+        resolvedExtra = { ...resolvedExtra, ...extracted };
+      }
+    }
+
     // Create metadata
     const metadata: PackageMetadata = {
       name: loc.name,
@@ -132,7 +194,7 @@ export class StorageService {
       repo: loc.repo,
       distribution: loc.distribution,
       component: loc.component,
-      ...controlExtra,
+      ...resolvedExtra,
     };
 
     // Write metadata
@@ -206,6 +268,57 @@ export class StorageService {
     this.cleanEmptyDirs(path.dirname(pkgPath));
 
     return true;
+  }
+
+  /**
+   * Extract control-file metadata from a .deb using dpkg-deb.
+   * Returns null if dpkg-deb is not available or the file is unreadable.
+   */
+  private extractDebControl(debPath: string): Partial<DebControlMeta> | null {
+    if (!fs.existsSync(debPath)) return null;
+    try {
+      const raw = execFileSync("dpkg-deb", ["--field", debPath], {
+        encoding: "utf-8",
+        timeout: 15_000,
+      });
+
+      // Parse field output — same key: value format as DEBIAN/control.
+      const fields: Record<string, string> = {};
+      let key = "";
+      for (const line of raw.split("\n")) {
+        if (line.startsWith(" ") || line.startsWith("\t")) {
+          if (key) fields[key] += "\n" + line;
+        } else {
+          const colon = line.indexOf(": ");
+          if (colon > 0) {
+            key = line.substring(0, colon);
+            fields[key] = line.substring(colon + 2);
+          }
+        }
+      }
+
+      const result: Partial<DebControlMeta> = {};
+      if (fields.Description) result.description = fields.Description.trimEnd();
+      if (fields["Multi-Arch"]) result.multiArch = fields["Multi-Arch"];
+      if (fields.Maintainer) result.maintainer = fields.Maintainer;
+      if (fields.Depends) result.depends = fields.Depends;
+      if (fields["Pre-Depends"]) result.preDepends = fields["Pre-Depends"];
+      if (fields.Suggests) result.suggests = fields.Suggests;
+      if (fields.Conflicts) result.conflicts = fields.Conflicts;
+      if (fields.Breaks) result.breaks = fields.Breaks;
+      if (fields.Replaces) result.replaces = fields.Replaces;
+      if (fields.Provides) result.provides = fields.Provides;
+      if (fields.Homepage) result.homepage = fields.Homepage;
+      if (fields.Section) result.section = fields.Section;
+      if (fields.Priority) result.priority = fields.Priority;
+      if (fields["Installed-Size"]) {
+        const parsed = parseInt(fields["Installed-Size"], 10);
+        if (!isNaN(parsed)) result.installedSize = parsed;
+      }
+      return result;
+    } catch {
+      return null;
+    }
   }
 
   private cleanEmptyDirs(dir: string): void {

@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import { StorageService, PackageLocation } from "../services/storage.js";
+import { StorageService, PackageLocation, DebControlMeta } from "../services/storage.js";
 import {
   validateDebianPackage,
   sanitizePath,
@@ -190,19 +190,28 @@ export function registerPackageRoutes(
           version: pkgVersion,
         };
 
-        // Carry across useful control fields so the apt Packages index is accurate
-        const controlExtra: { description?: string; multiArch?: string; maintainer?: string; depends?: string; homepage?: string; section?: string; priority?: string; installedSize?: number } = {};
+        // Carry across useful control fields so the apt Packages index is
+        // accurate.  All apt VersionHash-relevant fields (Depends, Pre-Depends,
+        // Conflicts, Breaks, Replaces) must be stored so the repo entry matches
+        // what dpkg records in /var/lib/dpkg/status.  If the built-in parser
+        // returned nothing (xz/zstd control.tar), storePackage() will fall back
+        // to dpkg-deb automatically.
+        const controlExtra: Partial<DebControlMeta> = {};
         if (validation.control) {
           const c = validation.control;
           if (c.Description) controlExtra.description = c.Description;
           if (c["Multi-Arch"]) controlExtra.multiArch = c["Multi-Arch"];
           if (c.Maintainer) controlExtra.maintainer = c.Maintainer;
+          if (c["Pre-Depends"]) controlExtra.preDepends = c["Pre-Depends"];
           if (c.Depends) controlExtra.depends = c.Depends;
+          if (c.Suggests) controlExtra.suggests = c.Suggests;
+          if (c.Conflicts) controlExtra.conflicts = c.Conflicts;
+          if (c.Breaks) controlExtra.breaks = c.Breaks;
+          if (c.Replaces) controlExtra.replaces = c.Replaces;
+          if (c.Provides) controlExtra.provides = c.Provides;
           if (c.Homepage) controlExtra.homepage = c.Homepage;
           if (c.Section) controlExtra.section = c.Section;
           if (c.Priority) controlExtra.priority = c.Priority;
-          // Only store Installed-Size when the deb control explicitly declares it.
-          // A synthetic value would create a hash mismatch with dpkg/status.
           const installedSizeRaw = c["Installed-Size"];
           if (installedSizeRaw) {
             const parsed = parseInt(installedSizeRaw, 10);

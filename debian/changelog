@@ -1,3 +1,18 @@
+pository (0.1.3) stable; urgency=medium
+
+  * Self-healing metadata: on service startup the index is automatically
+    repaired by reading control fields from .deb files for any packages
+    that were stored before upload-time metadata extraction was implemented.
+    No manual backfill scripts are needed.
+  * Upload fallback: when the built-in control parser fails (e.g. for
+    xz/zstd-compressed control archives), dpkg-deb is used to extract
+    metadata so uploads always store complete control fields.
+  * Additional relationship fields (Pre-Depends, Suggests, Conflicts,
+    Breaks, Replaces, Provides) are now extracted and served in the
+    Packages index, covering all apt VersionHash-relevant fields.
+
+ -- Pository Team <pository@example.com>  Thu, 26 Feb 2026 12:00:00 +0000
+
 pository (0.1.2) stable; urgency=medium
 
   * Fix: Architecture:all packages are now served from binary-{arch}/Packages

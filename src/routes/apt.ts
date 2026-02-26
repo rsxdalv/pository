@@ -89,7 +89,13 @@ function generatePackagesContent(
     if (pkg.homepage) lines.push(`Homepage: ${pkg.homepage}`);
     if (pkg.section) lines.push(`Section: ${pkg.section}`);
     if (pkg.priority) lines.push(`Priority: ${pkg.priority}`);
+    if (pkg.preDepends) lines.push(`Pre-Depends: ${pkg.preDepends}`);
     if (pkg.depends) lines.push(`Depends: ${pkg.depends}`);
+    if (pkg.suggests) lines.push(`Suggests: ${pkg.suggests}`);
+    if (pkg.conflicts) lines.push(`Conflicts: ${pkg.conflicts}`);
+    if (pkg.breaks) lines.push(`Breaks: ${pkg.breaks}`);
+    if (pkg.replaces) lines.push(`Replaces: ${pkg.replaces}`);
+    if (pkg.provides) lines.push(`Provides: ${pkg.provides}`);
 
     // Only emit Installed-Size if the deb's control explicitly declared it.
     // A synthetic size computed from the download size would diverge from what
