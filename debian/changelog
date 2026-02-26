@@ -1,3 +1,13 @@
+pository (0.1.1) stable; urgency=medium
+
+  * Fix: Architecture:all packages were indexed in both binary-amd64/Packages
+    and binary-all/Packages, causing apt to report every arch-independent
+    package as perpetually upgradeable (closes #5).
+    Architecture:all packages are now indexed exclusively in binary-all/Packages
+    so that apt sees each package from exactly one source.
+
+ -- Pository Team <pository@example.com>  Thu, 26 Feb 2026 00:00:00 +0000
+
 pository (0.1.0) stable; urgency=low
 
   * Initial release

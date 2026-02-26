@@ -114,13 +114,15 @@ function generateReleaseContent(
 
   // For every component × binary arch, generate the Packages content and compute checksums
   for (const component of components) {
-    // Packages that belong to this component and can be served for any arch
-    // (includes arch-specific and arch=all)
+    // Packages that belong to this component and match the exact arch.
+    // Architecture:all packages are only listed in binary-all/Packages (see below)
+    // so that apt does not see the same package from two sources and report it
+    // as perpetually upgradeable.
     for (const arch of architectures) {
       const pkgsForArch = packages.filter(
         (p) =>
           p.component === component &&
-          (p.architecture === arch || p.architecture === "all")
+          p.architecture === arch
       );
       if (pkgsForArch.length === 0) continue;
 
@@ -203,10 +205,13 @@ export function registerAptRoutes(
     async (request, reply) => {
       const { repo, distribution, component, arch } = request.params;
 
-      // Include both arch-specific and arch=all packages
+      // Each Packages index only contains packages for the requested arch.
+      // Architecture:all packages are served exclusively via binary-all/Packages
+      // so that apt does not double-count them and show every arch=all package
+      // as perpetually upgradeable.
       const packages = storage
         .listPackages({ repo, distribution, component })
-        .filter((p) => p.architecture === arch || p.architecture === "all");
+        .filter((p) => p.architecture === arch);
 
       const content = generatePackagesContent(packages, dataRoot);
 
