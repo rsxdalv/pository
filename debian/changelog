@@ -1,3 +1,36 @@
+pository (0.1.2) stable; urgency=medium
+
+  * Fix: Architecture:all packages are now served from binary-{arch}/Packages
+    instead of a separate binary-all/Packages index, matching how official
+    Ubuntu/Debian mirrors work.  apt only merges dpkg/status records with
+    entries from the native-arch Packages file; binary-all/Packages entries
+    were never merged, keeping installed arch:all packages perpetually
+    "upgradeable".
+  * Fix: Release file Codename is now unique per repo+distribution pairing
+    (pository-<repo>-<distribution>) to prevent apt from treating two
+    different Pository repos as the same source.
+  * Fix: Real package metadata (description, maintainer, depends, homepage,
+    section, priority) is now extracted from the deb's control file at upload
+    time instead of using synthetic placeholder values.  Mismatched description
+    text caused apt to compute a different Description-md5, creating duplicate
+    version objects.
+  * Fix: Description continuation lines are normalised to a single leading
+    space as required by the Packages file format.
+  * Fix: Description-md5 field is now included in generated Packages files.
+  * Fix: Installed-Size is emitted in the Packages index only when the deb's
+    own control file carries the field.  A synthetic Installed-Size value
+    diverged from what dpkg records in its status database, causing a
+    VersionHash mismatch and perpetual "upgradeable" state.
+  * Fix: Multi-Arch is emitted in the Packages index only when the deb's own
+    control file explicitly declares it.  Synthesising Multi-Arch: foreign for
+    arch:all packages caused a similar VersionHash mismatch for debs that do
+    not carry the field.
+  * Feature: Package list UI now groups versions by package name.  Each package
+    appears as a single row showing the latest version; older versions can be
+    expanded via an inline toggle.
+
+ -- Pository Team <pository@example.com>  Thu, 27 Feb 2026 00:00:00 +0000
+
 pository (0.1.1) stable; urgency=medium
 
   * Fix: Architecture:all packages were indexed in both binary-amd64/Packages

@@ -48,9 +48,6 @@ function generatePackagesContent(
     const aptArch = pkg.architecture === "all" ? "all" : pkg.architecture;
     const filename = `pool/${pkg.distribution}/${pkg.component}/${aptArch}/${pkg.name}_${pkg.version}_${pkg.architecture}.deb`;
 
-    // Compute installed size (approximate: size / 1024 KB, minimum 4)
-    const installedSizeKb = Math.max(4, Math.ceil(pkg.size / 1024));
-
     // Try to read MD5 from the stored file
     let md5 = "";
     try {
@@ -64,17 +61,69 @@ function generatePackagesContent(
       `Package: ${pkg.name}`,
       `Version: ${pkg.version}`,
       `Architecture: ${pkg.architecture}`,
-      `Installed-Size: ${installedSizeKb}`,
+    ];
+
+    // Emit optional control fields stored at upload time, in the conventional
+    // Packages-file order.
+    if (pkg.maintainer) lines.push(`Maintainer: ${pkg.maintainer}`);
+
+    // Emit Multi-Arch in the Packages index.
+    //
+    // The value emitted here must exactly match what dpkg will record in
+    // /var/lib/dpkg/status when the package is installed.  dpkg copies the
+    // Multi-Arch field from the deb's own control file (or from the Packages
+    // index) verbatim into the status database.
+    //
+    // Rule: only emit Multi-Arch when the deb's control file explicitly
+    // declares it (stored in pkg.multiArch at upload time).  Do NOT synthesise
+    // a Multi-Arch value for any package.  If a synthetic value is added here
+    // but the deb doesn't carry the same field, dpkg will record the synthetic
+    // value in its status the first time the package is installed, and then
+    // subsequent apt runs will see a mismatch between the Packages-file entry
+    // (which no longer has the synthetic value) and the status entry (which
+    // does), causing the package to appear perpetually "upgradeable".
+    if (pkg.multiArch) {
+      lines.push(`Multi-Arch: ${pkg.multiArch}`);
+    }
+
+    if (pkg.homepage) lines.push(`Homepage: ${pkg.homepage}`);
+    if (pkg.section) lines.push(`Section: ${pkg.section}`);
+    if (pkg.priority) lines.push(`Priority: ${pkg.priority}`);
+    if (pkg.depends) lines.push(`Depends: ${pkg.depends}`);
+
+    // Only emit Installed-Size if the deb's control explicitly declared it.
+    // A synthetic size computed from the download size would diverge from what
+    // dpkg/status stores (which comes from the deb itself), causing a version
+    // hash mismatch in apt and making the package appear perpetually upgradeable.
+    if (pkg.installedSize != null) {
+      lines.push(`Installed-Size: ${pkg.installedSize}`);
+    }
+
+    lines.push(
       `Filename: ${filename}`,
       `Size: ${pkg.size}`,
       `SHA256: ${pkg.sha256}`,
-    ];
+    );
 
     if (md5) {
       lines.push(`MD5sum: ${md5}`);
     }
 
-    lines.push(`Description: ${pkg.name} ${pkg.version}`);
+    // Use the real description from the control file if available, otherwise
+    // fall back to a minimal synthetic description.
+    // Normalise continuation lines: apt requires exactly one leading space.
+    // dpkg -I may return two spaces (the control file format uses one space but
+    // dpkg's output indents once more for display).
+    const rawDesc = pkg.description ?? `${pkg.name} ${pkg.version}`;
+    const description = rawDesc
+      .split("\n")
+      .map((line, i) =>
+        i === 0 ? line : " " + line.replace(/^\s*/, "")
+      )
+      .join("\n");
+    lines.push(`Description: ${description}`);
+    const descMd5 = crypto.createHash("md5").update(description + "\n").digest("hex");
+    lines.push(`Description-md5: ${descMd5}`);
 
     entries.push(lines.join("\n"));
   }
@@ -115,14 +164,16 @@ function generateReleaseContent(
   // For every component × binary arch, generate the Packages content and compute checksums
   for (const component of components) {
     // Packages that belong to this component and match the exact arch.
-    // Architecture:all packages are only listed in binary-all/Packages (see below)
-    // so that apt does not see the same package from two sources and report it
-    // as perpetually upgradeable.
+    // Architecture:all packages are included in each binary-{arch}/Packages file
+    // (same as real Debian/Ubuntu repos) so that apt can merge the installed
+    // dpkg/status record with the repo Packages entry.  Without this, apt keeps
+    // the records separate and reports every arch=all package as "upgradeable"
+    // even when the installed version already matches.
     for (const arch of architectures) {
       const pkgsForArch = packages.filter(
         (p) =>
           p.component === component &&
-          p.architecture === arch
+          (p.architecture === arch || p.architecture === "all")
       );
       if (pkgsForArch.length === 0) continue;
 
@@ -136,20 +187,10 @@ function generateReleaseContent(
       hashLines.push(` ${sha256} ${size} ${relPath} (SHA256)`);
     }
 
-    // Also generate a binary-all Packages
-    const pkgsAll = packages.filter(
-      (p) => p.component === component && p.architecture === "all"
-    );
-    if (pkgsAll.length > 0) {
-      const content = generatePackagesContent(pkgsAll, dataRoot);
-      const buf = Buffer.from(content, "utf-8");
-      const sha256 = crypto.createHash("sha256").update(buf).digest("hex");
-      const md5 = crypto.createHash("md5").update(buf).digest("hex");
-      const size = buf.length;
-      const relPath = `${component}/binary-all/Packages`;
-      hashLines.push(` ${md5} ${size} ${relPath}`);
-      hashLines.push(` ${sha256} ${size} ${relPath} (SHA256)`);
-    }
+    // Architecture:all packages are included in each binary-{arch}/Packages
+    // above.  Do NOT generate a separate binary-all/Packages — that would cause
+    // apt to see arch=all packages from two sources and report them as
+    // perpetually upgradeable (the original issue #5).
   }
 
   // Separate MD5Sum and SHA256 sections properly
@@ -162,9 +203,9 @@ function generateReleaseContent(
     `Origin: Pository`,
     `Label: Pository`,
     `Suite: ${distribution}`,
-    `Codename: ${distribution}`,
+    `Codename: pository-${repo}-${distribution}`,
     `Date: ${now}`,
-    `Architectures: ${architectures.join(" ")} all`,
+    `Architectures: ${architectures.join(" ")}`,
     `Components: ${components.join(" ")}`,
     `Description: Pository repository for ${repo}`,
     `MD5Sum:`,
@@ -205,13 +246,13 @@ export function registerAptRoutes(
     async (request, reply) => {
       const { repo, distribution, component, arch } = request.params;
 
-      // Each Packages index only contains packages for the requested arch.
-      // Architecture:all packages are served exclusively via binary-all/Packages
-      // so that apt does not double-count them and show every arch=all package
-      // as perpetually upgradeable.
+      // Each Packages index contains packages for the requested arch AND
+      // Architecture:all packages (matching real Debian/Ubuntu repos).  This
+      // allows apt to merge installed dpkg/status records with the repo entries
+      // and not show arch=all packages as perpetually upgradeable.
       const packages = storage
         .listPackages({ repo, distribution, component })
-        .filter((p) => p.architecture === arch);
+        .filter((p) => p.architecture === arch || p.architecture === "all");
 
       const content = generatePackagesContent(packages, dataRoot);
 

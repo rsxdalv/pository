@@ -16,6 +16,19 @@ export interface PackageMetadata {
   repo: string;
   distribution: string;
   component: string;
+  // Optional fields extracted from the deb control file at upload time.
+  // Stored so the apt Packages index can serve accurate metadata.
+  description?: string;
+  multiArch?: string;
+  maintainer?: string;
+  depends?: string;
+  homepage?: string;
+  section?: string;
+  priority?: string;
+  // Installed-Size from the deb control file (in kibibytes), if present.
+  // Only stored when the deb's control explicitly declares it, so we don't
+  // emit a synthetic value that would diverge from dpkg/status.
+  installedSize?: number;
 }
 
 export interface PackageLocation {
@@ -88,7 +101,8 @@ export class StorageService {
   async storePackage(
     loc: PackageLocation,
     fileBuffer: Buffer,
-    uploaderKeyId: string
+    uploaderKeyId: string,
+    controlExtra?: Partial<Pick<PackageMetadata, "description" | "multiArch" | "maintainer" | "depends" | "homepage" | "section" | "priority" | "installedSize">>
   ): Promise<PackageMetadata> {
     const pkgPath = this.getPackagePath(loc);
     const debPath = path.join(pkgPath, "package.deb");
@@ -118,6 +132,7 @@ export class StorageService {
       repo: loc.repo,
       distribution: loc.distribution,
       component: loc.component,
+      ...controlExtra,
     };
 
     // Write metadata

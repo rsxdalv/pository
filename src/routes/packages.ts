@@ -190,10 +190,31 @@ export function registerPackageRoutes(
           version: pkgVersion,
         };
 
+        // Carry across useful control fields so the apt Packages index is accurate
+        const controlExtra: { description?: string; multiArch?: string; maintainer?: string; depends?: string; homepage?: string; section?: string; priority?: string; installedSize?: number } = {};
+        if (validation.control) {
+          const c = validation.control;
+          if (c.Description) controlExtra.description = c.Description;
+          if (c["Multi-Arch"]) controlExtra.multiArch = c["Multi-Arch"];
+          if (c.Maintainer) controlExtra.maintainer = c.Maintainer;
+          if (c.Depends) controlExtra.depends = c.Depends;
+          if (c.Homepage) controlExtra.homepage = c.Homepage;
+          if (c.Section) controlExtra.section = c.Section;
+          if (c.Priority) controlExtra.priority = c.Priority;
+          // Only store Installed-Size when the deb control explicitly declares it.
+          // A synthetic value would create a hash mismatch with dpkg/status.
+          const installedSizeRaw = c["Installed-Size"];
+          if (installedSizeRaw) {
+            const parsed = parseInt(installedSizeRaw, 10);
+            if (!isNaN(parsed)) controlExtra.installedSize = parsed;
+          }
+        }
+
         const metadata = await storage.storePackage(
           loc,
           fileBuffer,
-          request.apiKey!.id
+          request.apiKey!.id,
+          controlExtra
         );
 
         logger.access({
