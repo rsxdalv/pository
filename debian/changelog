@@ -1,3 +1,14 @@
+pository (0.1.5) stable; urgency=medium
+
+  * Fix frontend build: remove orphaned duplicate component body from
+    packages.tsx that caused Turbopack "Return statement is not allowed here"
+    errors, breaking the frontend build entirely.
+  * Fix postinst: clean node_modules and .next before rebuilding to avoid
+    stale cache issues; force NODE_ENV=development so devDependencies
+    (tailwindcss, typescript, etc.) are installed during package setup.
+
+ -- Pository Team <pository@example.com>  Thu, 27 Feb 2026 13:30:00 +0000
+
 pository (0.1.4) stable; urgency=medium
 
   * Release: record package.json bump to 0.1.4 and update frontend

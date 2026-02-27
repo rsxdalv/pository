@@ -14,13 +14,25 @@ case "$1" in
             set -a; . /etc/default/pository-frontend; set +a
         fi
 
+        # Clean stale build artefacts so npm run build always starts fresh.
+        # node_modules is also removed so that npm ci installs a clean set
+        # of dependencies (including devDependencies needed for the build).
+        rm -rf node_modules .next
+
+        # Install ALL dependencies (including devDependencies such as
+        # tailwindcss and typescript) without setting NODE_ENV=production.
+        # npm ci --include=dev ensures devDeps are installed regardless of
+        # any inherited NODE_ENV= env var from the calling shell.
         if [ -f package-lock.json ]; then
-            npm ci || npm install
+            npm ci --include=dev
         else
             npm install
         fi
 
-        npm run build
+        # Build with NODE_ENV explicitly set to production so Next.js
+        # optimises the output.  Must NOT be "development" here as that
+        # causes the /_global-error prerender to fail.
+        NODE_ENV=production npm run build
 
         # Allow the pository user to write to the Next.js cache
         chown -R pository:pository /usr/share/pository-frontend/.next
