@@ -1,3 +1,14 @@
+pository (0.2.0) stable; urgency=medium
+
+  * Add GitHub OIDC authentication for package uploads (no static secret needed)
+  * New auth mechanism: Authorization: Bearer <github-oidc-jwt> on upload endpoints
+  * Default rule: private repos under oidcAllowedOwners can upload package matching repo name
+  * Per-repo override map (oidcOverrides in config.yaml) for multi-package repos
+  * New config fields: oidcAudience, oidcAllowedOwners, oidcRequirePrivate, oidcOverrides
+  * pository-deploy-action: new use-oidc: true input (see rsxdalv/pository-deploy-action)
+
+ -- Pository Team <pository@example.com>  Fri, 27 Feb 2026 17:00:00 +0000
+
 pository (0.1.6) stable; urgency=medium
 
   * Fix version display: bump frontend/package.json to 0.1.6 so postinst
