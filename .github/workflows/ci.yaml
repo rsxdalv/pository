@@ -34,6 +34,10 @@ jobs:
   build-deb:
     runs-on: ubuntu-latest
     needs: test
+    permissions:
+      contents: read
+      deployments: write   # bobheadxi/deployments@v1
+      id-token: write      # ansible-deploy-action OIDC JWT
     
     steps:
       - uses: actions/checkout@v4
