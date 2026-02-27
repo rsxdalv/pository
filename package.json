@@ -1,6 +1,6 @@
 {
   "name": "pository",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A lightweight Debian package artifact repository",
   "main": "src/index.ts",
   "type": "module",

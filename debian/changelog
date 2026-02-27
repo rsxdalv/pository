@@ -1,3 +1,12 @@
+pository (0.1.6) stable; urgency=medium
+
+  * Fix version display: bump frontend/package.json to 0.1.6 so postinst
+    rebuild bakes the correct version string into the Next.js static build.
+    Previous 0.1.5 deploy left frontend title showing v0.1.4 because apt
+    skipped reinstall of an already-installed 0.1.5 package.
+
+ -- Pository Team <pository@example.com>  Thu, 27 Feb 2026 14:15:00 +0000
+
 pository (0.1.5) stable; urgency=medium
 
   * Fix frontend build: remove orphaned duplicate component body from
