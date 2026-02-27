@@ -59,7 +59,7 @@ jobs:
           npm ci
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
-          mv ../pository_*.deb dist/
+          mv ../*.deb dist/
       
       - name: Upload Debian package artifact
         uses: actions/upload-artifact@v4
@@ -69,7 +69,7 @@ jobs:
 
       - name: Upload to Pository
         id: upload
-        uses: rsxdalv/pository@main
+        uses: rsxdalv/pository-deploy-action@main
         with:
           host: ${{ secrets.POSITORY_URL }}
           api-key: ${{ secrets.POSITORY_API_KEY }}
@@ -94,4 +94,16 @@ jobs:
           create-deployment: 'true'
           token: ${{ secrets.GITHUB_TOKEN }}
           env: production
-          env-url: https://monitoring.ttswebui.com/
+          env-url: https://pository.ttswebui.com/
+
+      - name: Deploy frontend to server
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        uses: rsxdalv/ansible-deploy-action@v1
+        with:
+          webhook-url: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+          service: pository-frontend
+          version: ${{ inputs.version || steps.upload.outputs.package-version }}
+          create-deployment: 'true'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: production
+          env-url: https://pository.ttswebui.com/
