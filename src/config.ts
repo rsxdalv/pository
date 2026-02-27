@@ -22,6 +22,11 @@ export interface Config {
   corsOrigins: string[];
   adminKey?: string;
   apiKeysPath: string;
+  // GitHub OIDC authentication
+  oidcAudience?: string;                          // JWT audience; defaults to 'pository'
+  oidcAllowedOwners?: string[];                   // GitHub owners allowed by default rule; defaults to ['rsxdalv']
+  oidcRequirePrivate?: boolean;                   // Only allow private repos via default rule; defaults to true
+  oidcOverrides?: Record<string, string[]>;       // Per-repo package allowlist, e.g. { 'rsxdalv/mono-repo': ['svc-a', 'svc-b'] }
 }
 
 export const defaultConfig: Config = {
@@ -39,4 +44,8 @@ export const defaultConfig: Config = {
   allowedRepos: ["default"],
   corsOrigins: [],
   apiKeysPath: "/etc/pository/api-keys.json",
+  oidcAudience: "pository",
+  oidcAllowedOwners: ["rsxdalv"],
+  oidcRequirePrivate: true,
+  oidcOverrides: {},
 };

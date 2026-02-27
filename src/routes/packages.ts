@@ -10,6 +10,7 @@ import {
 import { ApiKeyService } from "../services/api-keys.js";
 import { Logger } from "../utils/logger.js";
 import { Config } from "../config.js";
+import { isOidcAllowed } from "../services/oidc-scope.js";
 
 interface PackageParams {
   repo: string;
@@ -41,6 +42,10 @@ export function registerPackageRoutes(
     "/api/v1/packages",
     {
       preHandler: async (request, reply) => {
+        if (request.oidcClaims) {
+          // OIDC authenticated — scope check deferred until package name is known
+          return;
+        }
         if (!request.apiKey) {
           reply.code(401).send({ error: "Authentication required" });
           return;
@@ -168,17 +173,27 @@ export function registerPackageRoutes(
           return;
         }
 
-        // Check permission for this repo
-        if (
-          !apiKeyService.hasPermission(
-            request.apiKey!,
-            "write",
-            repo,
-            distribution
-          )
-        ) {
-          reply.code(403).send({ error: "No permission for this repository" });
-          return;
+        // Per-identity authorization
+        if (request.oidcClaims) {
+          // OIDC path: check package name against repo identity
+          const authz = isOidcAllowed(request.oidcClaims, pkgName, config);
+          if (!authz.allowed) {
+            reply.code(403).send({ error: "OIDC authorization denied", detail: authz.reason });
+            return;
+          }
+        } else {
+          // API key path: check repo/distribution-level permission
+          if (
+            !apiKeyService.hasPermission(
+              request.apiKey!,
+              "write",
+              repo,
+              distribution
+            )
+          ) {
+            reply.code(403).send({ error: "No permission for this repository" });
+            return;
+          }
         }
 
         const loc: PackageLocation = {
@@ -219,16 +234,20 @@ export function registerPackageRoutes(
           }
         }
 
+        const identity = request.oidcClaims
+          ? `oidc:${request.oidcClaims.repository}`
+          : request.apiKey!.id;
+
         const metadata = await storage.storePackage(
           loc,
           fileBuffer,
-          request.apiKey!.id,
+          identity,
           controlExtra
         );
 
         logger.access({
           action: "upload",
-          keyId: request.apiKey!.id,
+          keyId: identity,
           ip: request.ip,
           path: `${repo}/${distribution}/${component}/${pkgArch}/${pkgName}/${pkgVersion}`,
         });

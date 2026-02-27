@@ -100,7 +100,7 @@ async function main() {
   });
 
   // Register auth middleware for API routes
-  const authMiddleware = createAuthMiddleware(apiKeyService);
+  const authMiddleware = createAuthMiddleware(apiKeyService, config);
   app.addHook("preHandler", async (request, reply) => {
     // Skip auth for health endpoints and public apt repository routes
     if (

@@ -28,6 +28,11 @@ export function loadConfig(configPath?: string): Config {
       ...defaultConfig.retention,
       ...(fileConfig.retention || {}),
     },
+    // OIDC overrides merge separately so the default map isn't clobbered
+    oidcOverrides: {
+      ...(defaultConfig.oidcOverrides || {}),
+      ...(fileConfig.oidcOverrides || {}),
+    },
   };
 
   // Environment overrides
@@ -62,6 +67,15 @@ export function loadConfig(configPath?: string): Config {
   }
   if (process.env.POSITORY_CORS_ORIGINS) {
     config.corsOrigins = process.env.POSITORY_CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean);
+  }
+  if (process.env.POSITORY_OIDC_AUDIENCE) {
+    config.oidcAudience = process.env.POSITORY_OIDC_AUDIENCE;
+  }
+  if (process.env.POSITORY_OIDC_ALLOWED_OWNERS) {
+    config.oidcAllowedOwners = process.env.POSITORY_OIDC_ALLOWED_OWNERS.split(",").map((o) => o.trim()).filter(Boolean);
+  }
+  if (process.env.POSITORY_OIDC_REQUIRE_PRIVATE) {
+    config.oidcRequirePrivate = process.env.POSITORY_OIDC_REQUIRE_PRIVATE !== "false";
   }
 
   // Ensure directories exist

@@ -1,22 +1,42 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { ApiKeyService, ApiKeyData, ApiKeyRole } from "../services/api-keys.js";
+import { verifyGitHubOIDC, GitHubOidcClaims } from "./oidc-auth.js";
+import { Config } from "../config.js";
 
 declare module "fastify" {
   interface FastifyRequest {
     apiKey?: ApiKeyData;
+    oidcClaims?: GitHubOidcClaims;
   }
   // Note: FastifyInstance.apiKeyService is decorated in index.ts
 }
 
-export function createAuthMiddleware(apiKeyService: ApiKeyService) {
+export function createAuthMiddleware(apiKeyService: ApiKeyService, config: Config) {
   return async function authMiddleware(
     request: FastifyRequest,
     reply: FastifyReply
   ): Promise<void> {
-    const apiKey = request.headers["x-api-key"];
+    // Try OIDC Bearer token first
+    const authHeader = request.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      const audience = config.oidcAudience ?? "pository";
+      try {
+        request.oidcClaims = await verifyGitHubOIDC(token, audience);
+        return; // authenticated via OIDC
+      } catch (err) {
+        reply.code(401).send({
+          error: "Invalid or expired OIDC token",
+          detail: (err as Error).message,
+        });
+        return;
+      }
+    }
 
+    // Fall back to API key
+    const apiKey = request.headers["x-api-key"];
     if (!apiKey || typeof apiKey !== "string") {
-      reply.code(401).send({ error: "Missing API key" });
+      reply.code(401).send({ error: "Missing authentication: provide X-Api-Key or Authorization: Bearer <oidc-token>" });
       return;
     }
 
