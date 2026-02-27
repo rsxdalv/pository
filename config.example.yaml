@@ -45,3 +45,26 @@ retention:
   enabled: false
   # keepLastN: 5
   # maxAgeDays: 90
+
+# GitHub OIDC authentication (optional — zero config for the common case)
+#
+# Allows GitHub Actions workflows to upload packages without a static API key.
+# The workflow must have `id-token: write` permission.
+#
+# Default rule: any private repository under oidcAllowedOwners can upload a
+# package whose name matches the GitHub repository name (convention over config).
+# Example: repo "rsxdalv/my-service" → can upload package "my-service".
+#
+# Override examples:
+#   oidcOverrides:
+#     rsxdalv/mono-repo:      # one repo, multiple package names
+#       - service-a
+#       - service-b
+#     rsxdalv/deployment-bot: # wildcard — can upload anything
+#       - '*'
+#
+# oidcAudience: pository                  # must match the action's oidc-audience input
+# oidcAllowedOwners:                      # GitHub owners allowed by the default rule
+#   - rsxdalv
+# oidcRequirePrivate: true                # set to false to allow public repos via default rule
+# oidcOverrides: {}                       # per-repo package allowlists
