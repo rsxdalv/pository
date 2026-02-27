@@ -79,3 +79,31 @@ jobs:
           echo "Package: ${{ steps.upload.outputs.package-name }}"
           echo "Version: ${{ steps.upload.outputs.package-version }}"
           echo "Architecture: ${{ steps.upload.outputs.package-architecture }}"
+
+      - name: Create GitHub Deployment
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        uses: bobheadxi/deployments@v1
+        id: deployment
+        with:
+          step: start
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: production
+
+      - name: Deploy to server
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        uses: rsxdalv/ansible-deploy-action@v1
+        with:
+          webhook-url: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+          service: pository
+          version: ${{ inputs.version || steps.upload.outputs.package-version }}
+
+      - name: Update deployment status
+        if: (success() || failure()) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        uses: bobheadxi/deployments@v1
+        with:
+          step: finish
+          token: ${{ secrets.GITHUB_TOKEN }}
+          status: ${{ job.status }}
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
+          env: production
+          env_url: https://monitoring.ttswebui.com/
