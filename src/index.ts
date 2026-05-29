@@ -6,12 +6,15 @@ import { loadConfig } from "./utils/config-loader.js";
 import { Logger } from "./utils/logger.js";
 import { ApiKeyService } from "./services/api-keys.js";
 import { StorageService } from "./services/storage.js";
+import { OidcOverridesService } from "./services/oidc-overrides.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
 import { registerPackageRoutes } from "./routes/packages.js";
 import { registerKeyRoutes } from "./routes/keys.js";
 import { registerHealthRoutes, trackRequest } from "./routes/health.js";
 import { registerAptRoutes } from "./routes/apt.js";
+import { registerOidcOverridesRoutes } from "./routes/oidc-overrides.js";
 import fs from "node:fs";
+import { dirname, join } from "node:path";
 
 async function main() {
   const configPath = process.argv[2];
@@ -23,6 +26,10 @@ async function main() {
   // Initialize services
   const apiKeyService = new ApiKeyService(config.apiKeysPath, config.adminKey);
   const storage = new StorageService(config.dataRoot);
+  const overridesService = new OidcOverridesService(
+    join(dirname(config.apiKeysPath), "oidc-overrides.json")
+  );
+  await overridesService.load();
 
   // Create Fastify instance
   const fastifyOpts: Record<string, unknown> = {
@@ -117,8 +124,9 @@ async function main() {
 
   // Register routes
   registerHealthRoutes(app, storage);
-  registerPackageRoutes(app, storage, apiKeyService, logger, config);
+  registerPackageRoutes(app, storage, apiKeyService, logger, config, overridesService);
   registerKeyRoutes(app, apiKeyService, logger);
+  registerOidcOverridesRoutes(app, overridesService, apiKeyService, logger);
   registerAptRoutes(app, storage, config.dataRoot);
 
   // Start server

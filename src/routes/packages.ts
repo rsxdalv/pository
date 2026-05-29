@@ -11,6 +11,7 @@ import { ApiKeyService } from "../services/api-keys.js";
 import { Logger } from "../utils/logger.js";
 import { Config } from "../config.js";
 import { isOidcAllowed } from "../services/oidc-scope.js";
+import { OidcOverridesService } from "../services/oidc-overrides.js";
 
 interface PackageParams {
   repo: string;
@@ -35,7 +36,8 @@ export function registerPackageRoutes(
   storage: StorageService,
   apiKeyService: ApiKeyService,
   logger: Logger,
-  config: Config
+  config: Config,
+  overridesService: OidcOverridesService
 ): void {
   // Upload package
   app.post<{ Body: { repo?: string; distribution?: string; component?: string; architecture?: string } }>(
@@ -176,7 +178,7 @@ export function registerPackageRoutes(
         // Per-identity authorization
         if (request.oidcClaims) {
           // OIDC path: check package name against repo identity
-          const authz = isOidcAllowed(request.oidcClaims, pkgName, config);
+          const authz = isOidcAllowed(request.oidcClaims, pkgName, config, overridesService.getAll());
           if (!authz.allowed) {
             reply.code(403).send({ error: "OIDC authorization denied", detail: authz.reason });
             return;

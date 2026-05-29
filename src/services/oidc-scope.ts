@@ -26,7 +26,8 @@ export function isOidcAllowed(
     event_name: string;
   },
   packageName: string,
-  config: Config
+  config: Config,
+  dynamicOverrides?: Record<string, string[]>
 ): OidcAuthzResult {
   // Always block pull_request events (fork PRs could abuse uploads)
   if (claims.event_name === "pull_request") {
@@ -35,8 +36,8 @@ export function isOidcAllowed(
 
   const { repository, repository_visibility } = claims;
 
-  // Check explicit overrides first
-  const overrides = config.oidcOverrides ?? {};
+  // Check explicit overrides first — dynamic overrides (API-managed) take precedence over config
+  const overrides = { ...(config.oidcOverrides ?? {}), ...(dynamicOverrides ?? {}) };
   const overridePackages = overrides[repository];
   if (overridePackages) {
     if (overridePackages.includes("*") || overridePackages.includes(packageName)) {
@@ -67,11 +68,17 @@ export function isOidcAllowed(
     };
   }
 
-  // Default convention: repo name must match package name
-  if (repoName !== packageName) {
+  // Default convention: package name must be repoName plus one of the allowed suffixes
+  const allowedSuffixes: string[] = config.oidcAllowedSuffixes ?? [""];
+  const nameMatches = allowedSuffixes.some((suffix: string) => packageName === repoName + suffix);
+  if (!nameMatches) {
+    const suffixNote =
+      allowedSuffixes.length === 1 && allowedSuffixes[0] === ""
+        ? `the package name must equal the repo name`
+        : `the package name must be the repo name plus one of: ${allowedSuffixes.map((s: string) => `"${s || "(none)"}"` ).join(", ")}`;
     return {
       allowed: false,
-      reason: `Default rule: GitHub repo name "${repoName}" does not match package "${packageName}"; add an oidcOverride to permit uploading a different package name`,
+      reason: `Default rule: "${packageName}" does not match repo "${repoName}" (${suffixNote}); add an oidcOverride or configure oidcAllowedSuffixes`,
     };
   }
 

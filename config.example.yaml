@@ -68,3 +68,13 @@ retention:
 #   - rsxdalv
 # oidcRequirePrivate: true                # set to false to allow public repos via default rule
 # oidcOverrides: {}                       # per-repo package allowlists
+#
+# Multi-flavor (production / staging / testing) naming support:
+# oidcAllowedSuffixes lets a single GitHub repo upload multiple package flavors
+# by default rule without needing an explicit oidcOverride entry.
+# Example: repo "rsxdalv/my-service" → can upload my-service, my-service-staging, my-service-testing
+#
+# oidcAllowedSuffixes:                    # default: [""] (exact match only)
+#   - ''                                  # production:  my-service
+#   - '-staging'                          # staging:     my-service-staging
+#   - '-testing'                          # testing:     my-service-testing

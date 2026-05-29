@@ -27,6 +27,9 @@ export interface Config {
   oidcAllowedOwners?: string[];                   // GitHub owners allowed by default rule; defaults to ['rsxdalv']
   oidcRequirePrivate?: boolean;                   // Only allow private repos via default rule; defaults to true
   oidcOverrides?: Record<string, string[]>;       // Per-repo package allowlist, e.g. { 'rsxdalv/mono-repo': ['svc-a', 'svc-b'] }
+  // Extra suffixes allowed by the default name-matching rule.
+  // E.g. ["", "-staging", "-testing"] lets rsxdalv/my-service upload my-service, my-service-staging, my-service-testing
+  oidcAllowedSuffixes?: string[];
 }
 
 export const defaultConfig: Config = {
@@ -48,4 +51,5 @@ export const defaultConfig: Config = {
   oidcAllowedOwners: ["rsxdalv"],
   oidcRequirePrivate: true,
   oidcOverrides: {},
+  oidcAllowedSuffixes: [""],  // only exact repo-name match by default
 };

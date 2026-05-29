@@ -136,6 +136,21 @@ export class PositoryAPI {
   async deleteKey(id: string): Promise<void> {
     await this.fetch(`/api/v1/keys/${id}`, { method: "DELETE" });
   }
+
+  async listOidcOverrides(): Promise<{ overrides: Record<string, string[]> }> {
+    return this.fetch("/api/v1/oidc-overrides");
+  }
+
+  async upsertOidcOverride(repo: string, packages: string[]): Promise<void> {
+    await this.fetch(`/api/v1/oidc-overrides/${repo}`, {
+      method: "PUT",
+      body: JSON.stringify({ packages }),
+    });
+  }
+
+  async deleteOidcOverride(repo: string): Promise<void> {
+    await this.fetch(`/api/v1/oidc-overrides/${repo}`, { method: "DELETE" });
+  }
 }
 
 export function parseMetrics(metricsText: string): Metrics {

@@ -4,9 +4,10 @@ import { useState } from "react";
 import { Overview } from "@/components/overview";
 import { Packages } from "@/components/packages";
 import { ApiKeys } from "@/components/api-keys";
+import { OidcOverrides } from "@/components/oidc-overrides";
 import { ApiKeyProvider, useApiKey } from "@/lib/api-key-context";
 
-type Tab = "overview" | "packages" | "keys";
+type Tab = "overview" | "packages" | "keys" | "oidc";
 
 function DashboardContent() {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -19,20 +20,9 @@ function DashboardContent() {
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-                <svg
-                  className="h-6 w-6 text-primary-foreground"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                  />
-                </svg>
+              <div className="flex h-10 w-10 items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/icon.svg" alt="Pository" className="h-10 w-10 rounded-lg" />
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-foreground">Pository</h1>
@@ -98,6 +88,16 @@ function DashboardContent() {
           >
             API Keys
           </button>
+          <button
+            onClick={() => setActiveTab("oidc")}
+            className={`border-b-2 py-3 text-sm font-medium transition-colors ${
+              activeTab === "oidc"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            OIDC Overrides
+          </button>
         </nav>
       </header>
 
@@ -106,6 +106,7 @@ function DashboardContent() {
         {activeTab === "overview" && <Overview />}
         {activeTab === "packages" && <Packages />}
         {activeTab === "keys" && <ApiKeys />}
+        {activeTab === "oidc" && <OidcOverrides />}
       </main>
     </div>
   );
