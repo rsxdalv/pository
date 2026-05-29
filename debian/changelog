@@ -1,3 +1,18 @@
+pository (0.3.0) stable; urgency=medium
+
+  * OIDC Overrides management: new API (GET/PUT/DELETE /api/v1/oidc-overrides) for
+    managing per-repo package allowlists at runtime without restarting the service.
+    Overrides are persisted to /etc/pository/oidc-overrides.json (created by postinst).
+  * Frontend: new "OIDC Overrides" tab in the dashboard for add/edit/delete of overrides.
+  * New config field oidcAllowedSuffixes: allows a single GitHub repo to upload packages
+    with name suffixes (e.g. "", "-staging", "-testing") via the default OIDC rule without
+    requiring explicit oidcOverrides entries.
+  * Favicon: replaced placeholder 16x16 monochrome icon with a proper blue-background SVG
+    (white package cube) that matches the dashboard header logo.
+  * postinst: auto-create /etc/pository/oidc-overrides.json with correct ownership on install.
+
+ -- Pository Team <pository@example.com>  Thu, 29 May 2026 13:00:00 +0000
+
 pository (0.2.0) stable; urgency=medium
 
   * Add GitHub OIDC authentication for package uploads (no static secret needed)
