@@ -1,3 +1,17 @@
+pository (0.4.0) stable; urgency=medium
+
+  * Packages filter: search box moved to first position and doubled in width;
+    name filter now uses case-insensitive substring match instead of exact match.
+  * Packages list: default sort order is now most-recently-uploaded first.
+  * CI: add URL normalization step in build-deb workflow so bare hostnames in
+    POSITORY_URL / DEPLOY_WEBHOOK_URL are automatically prefixed with https://.
+  * nginx: HTTP block now sets client_max_body_size 110m and uses 308 (instead
+    of 301) so large .deb uploads redirected from http:// are not rejected.
+  * pository-deploy-action / ansible-deploy-action: normalize host/webhook URL
+    scheme inside the action before the curl call (bare hostname → https://).
+
+ -- Pository Team <pository@example.com>  Mon, 30 Jun 2026 20:00:00 +0000
+
 pository (0.3.0) stable; urgency=medium
 
   * OIDC Overrides management: new API (GET/PUT/DELETE /api/v1/oidc-overrides) for

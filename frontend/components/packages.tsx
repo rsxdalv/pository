@@ -38,7 +38,13 @@ function groupPackages(packages: PackageMetadata[]): Map<string, PackageMetadata
   for (const [, list] of groups) {
     list.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
   }
-  return groups;
+  // Sort groups so the most-recently-updated package name appears first
+  return new Map(
+    [...groups.entries()].sort(
+      ([, a], [, b]) =>
+        new Date(b[0].uploadedAt).getTime() - new Date(a[0].uploadedAt).getTime()
+    )
+  );
 }
 
 export function Packages() {
@@ -130,7 +136,20 @@ export function Packages() {
       {/* Filters */}
       <div className="rounded-lg border border-border bg-card p-6">
         <h3 className="mb-4 text-sm font-medium text-foreground">Filters</h3>
-        <div className="grid gap-4 md:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-6">
+          <div className="md:col-span-2">
+            <label className="mb-2 block text-xs text-muted-foreground">
+              Package Name
+            </label>
+            <input
+              type="text"
+              value={filters.name}
+              onChange={(e) => setFilters({ ...filters, name: e.target.value })}
+              placeholder="Search by name (partial match)..."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+
           <div>
             <label className="mb-2 block text-xs text-muted-foreground">
               Repository
@@ -207,19 +226,6 @@ export function Packages() {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-xs text-muted-foreground">
-              Package Name
-            </label>
-            <input
-              type="text"
-              value={filters.name}
-              onChange={(e) => setFilters({ ...filters, name: e.target.value })}
-              placeholder="Search..."
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
           </div>
         </div>
       </div>

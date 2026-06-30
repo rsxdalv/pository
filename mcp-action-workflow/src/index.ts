@@ -38,7 +38,7 @@ server.registerTool(
     const repo = input.repo?.trim() || 'default';
     const distribution = input.distribution?.trim() || 'stable';
     const component = input.component?.trim() || 'main';
-    const hostSecret = input.hostSecret?.trim() || 'POSITORY_HOST';
+    const hostSecret = input.hostSecret?.trim() || 'POSITORY_URL';
     const apiKeySecret = input.apiKeySecret?.trim() || 'POSITORY_API_KEY';
 
     const workflowYaml = `name: ${workflowName}
@@ -80,6 +80,7 @@ jobs:
 const secretSchema = z.object({
   hostSecret: z.string().optional(),
   apiKeySecret: z.string().optional(),
+  deployWebhookSecret: z.string().optional(),
   env: z.string().optional(),
   org: z.string().optional()
 });
@@ -91,8 +92,9 @@ server.registerTool(
     inputSchema: secretSchema
   },
   async (input: z.infer<typeof secretSchema>) => {
-    const hostSecret = input.hostSecret?.trim() || 'POSITORY_HOST';
+    const hostSecret = input.hostSecret?.trim() || 'POSITORY_URL';
     const apiKeySecret = input.apiKeySecret?.trim() || 'POSITORY_API_KEY';
+    const deployWebhookSecret = input.deployWebhookSecret?.trim() || 'DEPLOY_WEBHOOK_URL';
     const env = input.env?.trim();
     const org = input.org?.trim();
 
@@ -101,7 +103,8 @@ server.registerTool(
 
     const lines = [
       `${prefix.replace('<SECRET_NAME>', hostSecret)} --body "https://pository.example.com"`,
-      `${prefix.replace('<SECRET_NAME>', apiKeySecret)} --body "<api-key-with-write-access>"`
+      `${prefix.replace('<SECRET_NAME>', apiKeySecret)} --body "<api-key-with-write-access>"`,
+      `${prefix.replace('<SECRET_NAME>', deployWebhookSecret)} --body "https://ansible.example.com"`
     ];
 
     const details = env
@@ -109,6 +112,9 @@ server.registerTool(
       : org
         ? `Targets organization: ${org}`
         : 'Targets repository secrets';
+
+    // Note: always include the https:// scheme in the URL values — bare hostnames
+    // cause 301/308 redirects that drop POST bodies in the deploy actions.
 
     const content = [
       { type: 'text' as const, text: `${details}\n${lines.join('\n')}` }

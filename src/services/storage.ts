@@ -358,7 +358,7 @@ export class StorageService {
         if (filters.distribution && pkg.distribution !== filters.distribution) continue;
         if (filters.component && pkg.component !== filters.component) continue;
         if (filters.architecture && pkg.architecture !== filters.architecture) continue;
-        if (filters.name && pkg.name !== filters.name) continue;
+        if (filters.name && !pkg.name.toLowerCase().includes(filters.name.toLowerCase())) continue;
         if (filters.version && pkg.version !== filters.version) continue;
         results.push(pkg);
       }
