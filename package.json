@@ -8,7 +8,7 @@
     "start": "node --import=tsx src/index.ts",
     "dev": "node --import=tsx --watch src/index.ts",
     "build": "tsc --noEmit",
-    "test": "node --import=tsx --test tests/storage.test.ts tests/api-keys.test.ts tests/debian-validator.test.ts tests/integration.test.ts",
+    "test": "node --import=tsx --test tests/storage.test.ts tests/api-keys.test.ts tests/debian-validator.test.ts tests/integration.test.ts tests/sso.test.ts",
     "lint": "eslint src tests --ext .ts"
   },
   "keywords": [

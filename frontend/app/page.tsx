@@ -11,7 +11,7 @@ type Tab = "overview" | "packages" | "keys" | "oidc";
 
 function DashboardContent() {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
-  const { apiKey, clearApiKey } = useApiKey();
+  const { apiKey, clearApiKey, ssoUser } = useApiKey();
 
   return (
     <div className="min-h-screen bg-background">
@@ -31,7 +31,20 @@ function DashboardContent() {
                 </p>
               </div>
             </div>
-            {apiKey && (
+            {ssoUser && (
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <span title={`Signed in via Authelia SSO (${ssoUser.role})`}>
+                  {ssoUser.name || ssoUser.user}
+                </span>
+                <a
+                  href="https://sso.ttswebui.com/logout"
+                  className="rounded-md border border-border px-3 py-1.5 transition-colors hover:border-destructive hover:text-destructive"
+                >
+                  Sign out
+                </a>
+              </div>
+            )}
+            {apiKey && !ssoUser && (
               <button
                 onClick={clearApiKey}
                 className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useApiKey } from "@/lib/api-key-context";
 
 export function ApiKeyPrompt() {
-  const { setApiKey } = useApiKey();
+  const { setApiKey, loading } = useApiKey();
   const [input, setInput] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -13,6 +13,8 @@ export function ApiKeyPrompt() {
       setApiKey(input.trim());
     }
   };
+
+  if (loading) return null; // avoid flashing the prompt while checking for an SSO session
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
