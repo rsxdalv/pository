@@ -1,3 +1,10 @@
+pository (0.5.0) stable; urgency=medium
+
+  * Authelia SSO: dashboard signs in via Authelia forward-auth (trusted-proxy headers gated by
+    POSITORY_SSO_SECRET); new GET /api/v1/whoami; API key and GitHub OIDC auth unchanged.
+
+ -- Pository Team <pository@example.com>  Fri, 23 Oct 2026 09:33:33 +0000
+
 pository (0.4.0) stable; urgency=medium
 
   * Packages filter: search box moved to first position and doubled in width;
