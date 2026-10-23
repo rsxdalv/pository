@@ -8,6 +8,7 @@ import { ApiKeyService } from "./services/api-keys.js";
 import { StorageService } from "./services/storage.js";
 import { OidcOverridesService } from "./services/oidc-overrides.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
+import { registerWhoamiRoutes } from "./routes/whoami.js";
 import { registerPackageRoutes } from "./routes/packages.js";
 import { registerKeyRoutes } from "./routes/keys.js";
 import { registerHealthRoutes, trackRequest } from "./routes/health.js";
@@ -126,6 +127,7 @@ async function main() {
   registerHealthRoutes(app, storage);
   registerPackageRoutes(app, storage, apiKeyService, logger, config, overridesService);
   registerKeyRoutes(app, apiKeyService, logger);
+  registerWhoamiRoutes(app);
   registerOidcOverridesRoutes(app, overridesService, apiKeyService, logger);
   registerAptRoutes(app, storage, config.dataRoot);
 

@@ -48,17 +48,21 @@ export interface Metrics {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3222";
 
 export class PositoryAPI {
-  private apiKey: string;
+  private apiKey: string | null;
+  private baseUrl: string;
 
-  constructor(apiKey: string) {
+  // apiKey=null + baseUrl="/sso" talks to the Authelia-protected proxy path (cookie auth, no key)
+  constructor(apiKey: string | null, baseUrl: string = API_URL) {
     this.apiKey = apiKey;
+    this.baseUrl = baseUrl;
   }
 
   private async fetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const res = await fetch(`${API_URL}${endpoint}`, {
+    const res = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
+      credentials: this.apiKey ? options.credentials : "same-origin",
       headers: {
-        "X-Api-Key": this.apiKey,
+        ...(this.apiKey ? { "X-Api-Key": this.apiKey } : {}),
         "Content-Type": "application/json",
         ...options.headers,
       },

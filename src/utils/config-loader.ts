@@ -77,6 +77,15 @@ export function loadConfig(configPath?: string): Config {
   if (process.env.POSITORY_OIDC_REQUIRE_PRIVATE) {
     config.oidcRequirePrivate = process.env.POSITORY_OIDC_REQUIRE_PRIVATE !== "false";
   }
+  if (process.env.POSITORY_SSO_SECRET) {
+    config.ssoSecret = process.env.POSITORY_SSO_SECRET;
+  }
+  if (process.env.POSITORY_SSO_ADMIN_GROUPS) {
+    config.ssoAdminGroups = process.env.POSITORY_SSO_ADMIN_GROUPS.split(",").map((o) => o.trim()).filter(Boolean);
+  }
+  if (process.env.POSITORY_SSO_WRITE_GROUPS) {
+    config.ssoWriteGroups = process.env.POSITORY_SSO_WRITE_GROUPS.split(",").map((o) => o.trim()).filter(Boolean);
+  }
 
   // Ensure directories exist
   ensureDir(config.dataRoot);

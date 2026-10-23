@@ -78,3 +78,14 @@ retention:
 #   - ''                                  # production:  my-service
 #   - '-staging'                          # staging:     my-service-staging
 #   - '-testing'                          # testing:     my-service-testing
+
+# Authelia SSO via nginx forward-auth (dashboard login without an API key).
+# nginx must add `X-Pository-Sso-Secret: <ssoSecret>` plus Remote-User / Remote-Groups
+# ONLY on the Authelia-protected /sso/ location. Requests without the matching secret are
+# never treated as SSO, so the open /api/v1 location (CI, apt, OIDC) is unaffected.
+# Env: POSITORY_SSO_SECRET, POSITORY_SSO_ADMIN_GROUPS, POSITORY_SSO_WRITE_GROUPS
+#
+# ssoSecret: <long-random-string>
+# ssoAdminGroups: [admins]                # Authelia groups -> admin role
+# ssoWriteGroups: []                      # Authelia groups -> write role
+# ssoDefaultRole: read                    # read | write | admin | none for other authenticated users

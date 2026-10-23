@@ -30,6 +30,13 @@ export interface Config {
   // Extra suffixes allowed by the default name-matching rule.
   // E.g. ["", "-staging", "-testing"] lets rsxdalv/my-service upload my-service, my-service-staging, my-service-testing
   oidcAllowedSuffixes?: string[];
+  // Authelia SSO (trusted reverse proxy). When ssoSecret is set, requests carrying a matching
+  // X-Pository-Sso-Secret header (added by nginx after Authelia forward-auth) are authenticated
+  // from the Remote-User / Remote-Groups headers instead of an API key.
+  ssoSecret?: string;
+  ssoAdminGroups?: string[];                      // Authelia groups mapped to the admin role; defaults to ['admins']
+  ssoWriteGroups?: string[];                      // Authelia groups mapped to the write role
+  ssoDefaultRole?: "read" | "write" | "admin" | "none"; // role for authenticated users in no listed group; defaults to 'read'
 }
 
 export const defaultConfig: Config = {
@@ -52,4 +59,7 @@ export const defaultConfig: Config = {
   oidcRequirePrivate: true,
   oidcOverrides: {},
   oidcAllowedSuffixes: [""],  // only exact repo-name match by default
+  ssoAdminGroups: ["admins"],
+  ssoWriteGroups: [],
+  ssoDefaultRole: "read",
 };
