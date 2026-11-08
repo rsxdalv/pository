@@ -3,6 +3,7 @@ import { StorageService, PackageMetadata } from "../services/storage.js";
 import crypto from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
+import zlib from "node:zlib";
 
 interface AptRepoParams {
   repo: string;
@@ -26,36 +27,19 @@ interface AptPoolParams {
  * Generate the apt-format Packages file content for a given set of packages.
  * Filename paths are relative to the repo base URL.
  */
-function generatePackagesContent(
+async function generatePackagesContent(
   packages: PackageMetadata[],
-  dataRoot: string
-): string {
+  storage: StorageService
+): Promise<string> {
   const entries: string[] = [];
 
   for (const pkg of packages) {
-    const debPath = path.join(
-      dataRoot,
-      pkg.repo,
-      pkg.distribution,
-      pkg.component,
-      pkg.architecture,
-      pkg.name,
-      pkg.version,
-      "package.deb"
-    );
-
     // Compute the relative Filename for apt download
     const aptArch = pkg.architecture === "all" ? "all" : pkg.architecture;
     const filename = `pool/${pkg.distribution}/${pkg.component}/${aptArch}/${pkg.name}_${pkg.version}_${pkg.architecture}.deb`;
 
-    // Try to read MD5 from the stored file
-    let md5 = "";
-    try {
-      const buf = fs.readFileSync(debPath);
-      md5 = crypto.createHash("md5").update(buf).digest("hex");
-    } catch {
-      // skip MD5 if file unreadable
-    }
+    // MD5 is computed at upload time (and lazily backfilled once for older entries).
+    const md5 = (await storage.ensureMd5(pkg)) ?? "";
 
     const lines = [
       `Package: ${pkg.name}`,
@@ -137,16 +121,58 @@ function generatePackagesContent(
   return entries.length > 0 ? entries.join("\n\n") + "\n\n" : "";
 }
 
+interface PackagesEntry {
+  buf: Buffer;
+  gz: Buffer;
+}
+
+// In-memory caches of generated apt indexes. Each entry records the repo
+// revision it was built from and is rebuilt once the repo's index changes
+// (upload / delete / prune).
+const aptCache = new Map<string, { rev: number; value: Promise<unknown> }>();
+
+function cached<T>(storage: StorageService, repo: string, key: string, build: () => Promise<T>): Promise<T> {
+  const rev = storage.getRepoRevision(repo);
+  const hit = aptCache.get(key);
+  if (hit && hit.rev === rev) return hit.value as Promise<T>;
+  const value = build();
+  aptCache.set(key, { rev, value });
+  value.catch(() => {
+    if (aptCache.get(key)?.value === value) aptCache.delete(key);
+  });
+  return value;
+}
+
+function getPackagesEntry(
+  storage: StorageService,
+  repo: string,
+  distribution: string,
+  component: string,
+  arch: string
+): Promise<PackagesEntry> {
+  return cached(storage, repo, `packages|${repo}|${distribution}|${component}|${arch}`, async () => {
+    // Each Packages index contains packages for the requested arch AND
+    // Architecture:all packages (matching real Debian/Ubuntu repos).  This
+    // allows apt to merge installed dpkg/status records with the repo entries
+    // and not show arch=all packages as perpetually upgradeable.
+    const packages = storage
+      .listPackages({ repo, distribution, component })
+      .filter((p) => p.architecture === arch || p.architecture === "all");
+    const buf = Buffer.from(await generatePackagesContent(packages, storage), "utf-8");
+    return { buf, gz: zlib.gzipSync(buf) };
+  });
+}
+
 /**
  * Generate a minimal apt Release file listing available components and
  * hashes for every Packages file under this distribution.
  */
-function generateReleaseContent(
+async function generateReleaseContent(
   repo: string,
   distribution: string,
   packages: PackageMetadata[],
-  dataRoot: string
-): string {
+  storage: StorageService
+): Promise<string> {
   // Collect distinct component/arch pairs
   const pairs = new Set<string>();
   for (const pkg of packages) {
@@ -176,15 +202,10 @@ function generateReleaseContent(
     // the records separate and reports every arch=all package as "upgradeable"
     // even when the installed version already matches.
     for (const arch of architectures) {
-      const pkgsForArch = packages.filter(
-        (p) =>
-          p.component === component &&
-          (p.architecture === arch || p.architecture === "all")
-      );
-      if (pkgsForArch.length === 0) continue;
+      const entry = await getPackagesEntry(storage, repo, distribution, component, arch);
+      if (entry.buf.length === 0) continue;
 
-      const content = generatePackagesContent(pkgsForArch, dataRoot);
-      const buf = Buffer.from(content, "utf-8");
+      const buf = entry.buf;
       const sha256 = crypto.createHash("sha256").update(buf).digest("hex");
       const md5 = crypto.createHash("md5").update(buf).digest("hex");
       const size = buf.length;
@@ -232,13 +253,9 @@ export function registerAptRoutes(
     async (request, reply) => {
       const { repo, distribution } = request.params;
 
-      const packages = storage.listPackages({ repo, distribution });
-
-      if (packages.length === 0) {
-        // Still produce a valid (empty) Release for the distribution
-      }
-
-      const content = generateReleaseContent(repo, distribution, packages, dataRoot);
+      const content = await cached(storage, repo, `release|${repo}|${distribution}`, () =>
+        generateReleaseContent(repo, distribution, storage.listPackages({ repo, distribution }), storage)
+      );
 
       reply
         .header("Content-Type", "text/plain; charset=utf-8")
@@ -251,20 +268,24 @@ export function registerAptRoutes(
     "/apt/:repo/dists/:distribution/:component/binary-:arch/Packages",
     async (request, reply) => {
       const { repo, distribution, component, arch } = request.params;
-
-      // Each Packages index contains packages for the requested arch AND
-      // Architecture:all packages (matching real Debian/Ubuntu repos).  This
-      // allows apt to merge installed dpkg/status records with the repo entries
-      // and not show arch=all packages as perpetually upgradeable.
-      const packages = storage
-        .listPackages({ repo, distribution, component })
-        .filter((p) => p.architecture === arch || p.architecture === "all");
-
-      const content = generatePackagesContent(packages, dataRoot);
+      const entry = await getPackagesEntry(storage, repo, distribution, component, arch);
 
       reply
         .header("Content-Type", "text/plain; charset=utf-8")
-        .send(content);
+        .send(entry.buf);
+    }
+  );
+
+  // Packages.gz — no auth required
+  app.get<{ Params: AptComponentParams }>(
+    "/apt/:repo/dists/:distribution/:component/binary-:arch/Packages.gz",
+    async (request, reply) => {
+      const { repo, distribution, component, arch } = request.params;
+      const entry = await getPackagesEntry(storage, repo, distribution, component, arch);
+
+      reply
+        .header("Content-Type", "application/gzip")
+        .send(entry.gz);
     }
   );
 
@@ -299,11 +320,14 @@ export function registerAptRoutes(
         return;
       }
 
+      const size = fs.statSync(debPath).size;
       reply.header("Content-Type", "application/vnd.debian.binary-package");
+      reply.header("Content-Length", size);
       reply.header(
         "Content-Disposition",
         `attachment; filename="${filename}"`
       );
+      request.trackedBytes = { bytes: size, upload: false };
 
       const stream = fs.createReadStream(debPath);
       return reply.send(stream);

@@ -3,7 +3,29 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { useApiKey } from "@/lib/api-key-context";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ApiKeyPrompt } from "./api-key-prompt";
+import { Skeleton } from "./overview/shared";
+
+const REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]+$/;
+// Debian package names: lowercase alnum start, then lowercase alnum + . -
+const PKG_RE = /^[a-z0-9][a-z0-9+.-]+$/;
+
+function validate(repo: string, packagesRaw: string, editing: boolean) {
+  const errors: { repo?: string; packages?: string } = {};
+  const r = repo.trim();
+  if (!r) errors.repo = "Repository is required, e.g. rsxdalv/mono-repo.";
+  else if (!editing && !REPO_RE.test(r)) errors.repo = "Use the form owner/name (letters, digits, - . _). Wildcards are not allowed here.";
+  const pkgs = packagesRaw.split(",").map((p) => p.trim()).filter(Boolean);
+  if (pkgs.length === 0) errors.packages = "Add at least one package name, or * to allow any.";
+  else {
+    const bad = pkgs.filter((p) => p !== "*" && !PKG_RE.test(p));
+    if (bad.length) errors.packages = `Invalid package name${bad.length > 1 ? "s" : ""}: ${bad.join(", ")}. Use lowercase letters, digits, + - . (min. 2 chars) or *.`;
+    else if (pkgs.includes("*") && pkgs.length > 1) errors.packages = "* already allows every package; remove the other entries.";
+  }
+  return { errors, pkgs };
+}
 
 interface OverrideFormState {
   repo: string;
@@ -17,11 +39,14 @@ export function OidcOverrides() {
   const [form, setForm] = useState<OverrideFormState>({ repo: "", packages: "" });
   const [deletingRepo, setDeletingRepo] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<{ repo?: string; packages?: string }>({});
+  const { toast } = useToast();
+  const confirm = useConfirm();
 
-  const { data, mutate, error } = useSWR(
+  const { data, mutate, error, isLoading } = useSWR(
     apiKey ? ["oidc-overrides", apiKey] : null,
     () => api?.listOidcOverrides(),
-    { refreshInterval: 30000 }
+    { refreshInterval: 30000, shouldRetryOnError: false }
   );
 
   if (!apiKey) {
@@ -76,45 +101,49 @@ export function OidcOverrides() {
   };
 
   const cancelForm = () => {
+    setErrors({});
     setIsAdding(false);
     setEditingRepo(null);
     setForm({ repo: "", packages: "" });
   };
 
-  const handleSave = async () => {
-    const repoTrimmed = form.repo.trim();
-    if (!repoTrimmed) {
-      alert("Repository path is required (e.g. owner/repo-name)");
-      return;
-    }
-    const packages = form.packages
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (packages.length === 0) {
-      alert('At least one package name is required (use * for wildcard)');
-      return;
-    }
+  const handleSave = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const { errors: errs, pkgs } = validate(form.repo, form.packages, !!editingRepo);
+    setErrors(errs);
+    if (errs.repo || errs.packages) return;
     setSaving(true);
     try {
-      await api?.upsertOidcOverride(repoTrimmed, packages);
+      await api?.upsertOidcOverride(form.repo.trim(), pkgs);
+      toast({ title: editingRepo ? "Override updated" : "Override saved", description: form.repo.trim(), variant: "success" });
       cancelForm();
       mutate();
     } catch (err) {
-      alert(`Failed to save override: ${err}`);
+      toast({ title: "Failed to save override", description: err instanceof Error ? err.message : String(err), variant: "error" });
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (repo: string) => {
-    if (!confirm(`Delete OIDC override for "${repo}"?`)) return;
+    const ok = await confirm({
+      title: "Delete OIDC override?",
+      description: (
+        <>
+          <code className="rounded bg-muted px-1">{repo}</code> will fall back to the default rule (package name must match the repo name).
+        </>
+      ),
+      confirmLabel: "Delete override",
+      destructive: true,
+    });
+    if (!ok) return;
     setDeletingRepo(repo);
     try {
       await api?.deleteOidcOverride(repo);
+      toast({ title: "Override deleted", description: repo, variant: "success" });
       mutate();
     } catch (err) {
-      alert(`Failed to delete override: ${err}`);
+      toast({ title: "Failed to delete override", description: err instanceof Error ? err.message : String(err), variant: "error" });
     } finally {
       setDeletingRepo(null);
     }
@@ -123,7 +152,7 @@ export function OidcOverrides() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-foreground">OIDC Overrides</h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -138,19 +167,26 @@ export function OidcOverrides() {
         </button>
       </div>
 
+      {error && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+          <p className="text-sm text-destructive">Failed to load overrides: {error.message}</p>
+          <button onClick={() => mutate()} className="rounded-md border border-border bg-background px-3 py-1 text-sm text-foreground hover:bg-muted">Retry</button>
+        </div>
+      )}
+
       {/* Info box */}
-      <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground space-y-1">
+      <div className="space-y-1 rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
         <p>
-          <span className="font-semibold text-foreground">Default rule:</span> a private repo under an allowed owner can upload a package whose name matches the repo name (e.g. <code className="rounded bg-muted px-1">rsxdalv/my-service</code> → package <code className="rounded bg-muted px-1">my-service</code>).
+          <span className="font-semibold text-foreground">Default rule:</span> a private repo under an allowed owner may upload a package whose name equals the repo name (e.g. <code className="rounded bg-muted px-1">rsxdalv/my-service</code> → <code className="rounded bg-muted px-1">my-service</code>). The server may also allow configured name suffixes (e.g. <code className="rounded bg-muted px-1">my-service-docs</code>), and <code className="rounded bg-muted px-1">pull_request</code> events are always rejected.
         </p>
         <p>
-          Use overrides to allow a repo to upload <span className="font-semibold text-foreground">multiple packages</span> or to use a <span className="font-semibold text-foreground">wildcard</span> (<code className="rounded bg-muted px-1">*</code>).
+          An override <span className="font-semibold text-foreground">replaces</span> the default rule for that repo: list every package it may upload, or use <code className="rounded bg-muted px-1">*</code> for any package.
         </p>
       </div>
 
       {/* Add / Edit Form */}
       {isAdding && (
-        <div className="rounded-lg border border-border bg-card p-6">
+        <form onSubmit={handleSave} noValidate className="rounded-lg border border-border bg-card p-4 sm:p-6">
           <h3 className="mb-4 text-lg font-semibold text-foreground">
             {editingRepo ? `Edit override for "${editingRepo}"` : "Add Override"}
           </h3>
@@ -164,9 +200,11 @@ export function OidcOverrides() {
                 value={form.repo}
                 onChange={(e) => setForm({ ...form, repo: e.target.value })}
                 disabled={!!editingRepo}
+                aria-invalid={!!errors.repo}
                 placeholder="rsxdalv/mono-repo"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                className={`w-full rounded-md border ${errors.repo ? "border-destructive" : "border-input"} bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50`}
               />
+              {errors.repo && <p role="alert" className="mt-1 text-sm text-destructive">{errors.repo}</p>}
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-foreground">
@@ -177,23 +215,27 @@ export function OidcOverrides() {
                 type="text"
                 value={form.packages}
                 onChange={(e) => setForm({ ...form, packages: e.target.value })}
+                aria-invalid={!!errors.packages}
                 placeholder="service-a, service-b"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className={`w-full rounded-md border ${errors.packages ? "border-destructive" : "border-input"} bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring`}
               />
+              {errors.packages && <p role="alert" className="mt-1 text-sm text-destructive">{errors.packages}</p>}
             </div>
             <button
-              onClick={handleSave}
+              type="submit"
               disabled={saving}
               className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
               {saving ? "Saving…" : editingRepo ? "Update Override" : "Save Override"}
             </button>
           </div>
-        </div>
+        </form>
       )}
 
       {/* Table */}
-      {entries.length === 0 ? (
+      {isLoading ? (
+        <Skeleton className="h-32" />
+      ) : entries.length === 0 ? (
         <div className="rounded-lg border border-border bg-card p-12 text-center">
           <svg
             className="mx-auto h-12 w-12 text-muted-foreground"
@@ -215,7 +257,7 @@ export function OidcOverrides() {
         </div>
       ) : (
         <div className="rounded-lg border border-border bg-card overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full min-w-[480px] text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">
@@ -240,7 +282,7 @@ export function OidcOverrides() {
                           key={pkg}
                           className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${
                             pkg === "*"
-                              ? "bg-yellow-500/20 text-yellow-400"
+                              ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
                               : "bg-primary/10 text-primary"
                           }`}
                         >
@@ -269,7 +311,7 @@ export function OidcOverrides() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
     </div>

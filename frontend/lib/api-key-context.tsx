@@ -1,7 +1,9 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { PositoryAPI } from "./api";
+import { PositoryAPI, API_URL } from "./api";
+
+export type Role = "admin" | "write" | "read";
 
 export interface SsoUser {
   user: string;
@@ -22,6 +24,12 @@ interface ApiKeyContextType {
   setApiKey: (key: string) => void;
   clearApiKey: () => void;
   api: PositoryAPI | null;
+  /** Caller role; null while unknown / signed out. */
+  role: Role | null;
+}
+
+function isRole(r: unknown): r is Role {
+  return r === "admin" || r === "write" || r === "read";
 }
 
 const ApiKeyContext = createContext<ApiKeyContextType | undefined>(undefined);
@@ -31,6 +39,7 @@ export function ApiKeyProvider({ children }: { children: ReactNode }) {
   const [apiKey, setApiKeyState] = useState<string | null>(null);
   const [ssoUser, setSsoUser] = useState<SsoUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [keyRole, setKeyRole] = useState<Role | null>(null);
 
   // Prefer an Authelia SSO session; fall back to a stored API key (local dev / no proxy)
   useEffect(() => {
@@ -51,7 +60,12 @@ export function ApiKeyProvider({ children }: { children: ReactNode }) {
         // no SSO proxy available
       }
       if (cancelled) return;
-      const stored = localStorage.getItem("pository_api_key");
+      let stored: string | null = null;
+      try {
+        stored = localStorage.getItem("pository_api_key");
+      } catch {
+        // storage unavailable
+      }
       if (stored) setApiKeyState(stored);
       setLoading(false);
     })();
@@ -60,15 +74,48 @@ export function ApiKeyProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Learn the role of an API key holder
+  useEffect(() => {
+    if (!apiKey || ssoUser) {
+      setKeyRole(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/whoami`, { headers: { "X-Api-Key": apiKey } });
+        if (!res.ok) return;
+        const who = await res.json();
+        if (!cancelled && isRole(who.role)) setKeyRole(who.role);
+      } catch {
+        // role stays unknown
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiKey, ssoUser]);
+
   const setApiKey = (key: string) => {
     setApiKeyState(key);
-    localStorage.setItem("pository_api_key", key);
+    try {
+      localStorage.setItem("pository_api_key", key);
+    } catch {
+      // ignore
+    }
   };
 
   const clearApiKey = () => {
     setApiKeyState(null);
-    localStorage.removeItem("pository_api_key");
+    setKeyRole(null);
+    try {
+      localStorage.removeItem("pository_api_key");
+    } catch {
+      // ignore
+    }
   };
+
+  const role: Role | null = ssoUser ? (isRole(ssoUser.role) ? ssoUser.role : null) : keyRole;
 
   const effectiveKey = ssoUser ? SSO_SENTINEL : apiKey;
   const api = ssoUser
@@ -79,7 +126,7 @@ export function ApiKeyProvider({ children }: { children: ReactNode }) {
 
   return (
     <ApiKeyContext.Provider
-      value={{ ssoUser, loading, apiKey: effectiveKey, setApiKey, clearApiKey, api }}
+      value={{ ssoUser, loading, apiKey: effectiveKey, setApiKey, clearApiKey, api, role }}
     >
       {children}
     </ApiKeyContext.Provider>

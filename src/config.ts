@@ -18,6 +18,10 @@ export interface Config {
   tls: TlsConfig;
   retention: RetentionConfig;
   maxUploadSize: number;
+  // Fastify trustProxy value (boolean, or comma-separated IPs/CIDRs). Default: loopback (nginx on the same host).
+  trustProxy: boolean | string;
+  // Rate limit: max requests per minute per identity (API key / SSO user / client IP).
+  rateLimitMax: number;
   allowedRepos: string[];
   corsOrigins: string[];
   adminKey?: string;
@@ -51,6 +55,8 @@ export const defaultConfig: Config = {
     enabled: false,
   },
   maxUploadSize: 100 * 1024 * 1024, // 100MB
+  trustProxy: "127.0.0.1,::1",
+  rateLimitMax: 300,
   allowedRepos: ["default"],
   corsOrigins: [],
   apiKeysPath: "/etc/pository/api-keys.json",

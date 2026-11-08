@@ -1,6 +1,13 @@
 import { FastifyInstance } from "fastify";
 import { StorageService } from "../services/storage.js";
 
+declare module "fastify" {
+  interface FastifyRequest {
+    /** Set by upload/download handlers so the onResponse hook can feed byte counters. */
+    trackedBytes?: { bytes: number; upload: boolean };
+  }
+}
+
 interface Metrics {
   requestsTotal: number;
   requestsByMethod: Record<string, number>;
