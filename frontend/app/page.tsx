@@ -6,6 +6,8 @@ import { Packages } from "@/components/packages";
 import { ApiKeys } from "@/components/api-keys";
 import { OidcOverrides } from "@/components/oidc-overrides";
 import { ApiKeyProvider, useApiKey } from "@/lib/api-key-context";
+import { ToastProvider } from "@/components/ui/toast";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 
 type Tab = "overview" | "packages" | "keys" | "oidc";
 
@@ -128,7 +130,11 @@ function DashboardContent() {
 export default function Home() {
   return (
     <ApiKeyProvider>
-      <DashboardContent />
+      <ToastProvider>
+        <ConfirmProvider>
+          <DashboardContent />
+        </ConfirmProvider>
+      </ToastProvider>
     </ApiKeyProvider>
   );
 }

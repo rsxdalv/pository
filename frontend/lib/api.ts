@@ -10,6 +10,55 @@ export interface PackageMetadata {
   repo: string;
   distribution: string;
   component: string;
+  md5?: string;
+  // Control-file fields (present for most packages)
+  description?: string;
+  maintainer?: string;
+  depends?: string;
+  preDepends?: string;
+  suggests?: string;
+  conflicts?: string;
+  breaks?: string;
+  replaces?: string;
+  provides?: string;
+  homepage?: string;
+  section?: string;
+  priority?: string;
+  multiArch?: string;
+  installedSize?: number;
+}
+
+/** GET /api/v1/info (read role) */
+export interface ServerInfo {
+  version: string;
+  allowedRepos: string[];
+  maxUploadSize: number;
+  retention: { enabled: boolean; keepLastN?: number; maxAgeDays?: number };
+}
+
+/** GET /api/v1/stats (read role) */
+export interface RepoStats {
+  totalSize: number;
+  versionCount: number;
+  packageCount: number; // distinct package names
+  byRepo: Record<string, { count: number; size: number }>;
+  byArchitecture: Record<string, number>;
+  uploadsByDay: { date: string; count: number; size: number }[]; // last 30 days, oldest first, zero-filled
+  recentUploads: PackageMetadata[]; // newest first, max 10
+}
+
+/** POST /api/v1/packages/prune (admin role) */
+export interface PruneRequest {
+  keepLastN: number; // >= 1, versions kept per repo/dist/component/arch/name
+  name?: string;
+  repo?: string;
+  distribution?: string;
+  dryRun?: boolean;
+}
+export interface PruneResult {
+  dryRun: boolean;
+  deleted: PackageMetadata[];
+  freedBytes: number;
 }
 
 export interface StorageStats {
@@ -45,7 +94,12 @@ export interface Metrics {
   avgLatency: number;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3222";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3222";
+
+/** Public base URL for apt clients of a given repo, e.g. https://host/apt/default */
+export function aptRepoUrl(repo: string): string {
+  return `${API_URL.replace(/\/$/, "")}/apt/${repo}`;
+}
 
 export class PositoryAPI {
   private apiKey: string | null;
@@ -63,7 +117,8 @@ export class PositoryAPI {
       credentials: this.apiKey ? options.credentials : "same-origin",
       headers: {
         ...(this.apiKey ? { "X-Api-Key": this.apiKey } : {}),
-        "Content-Type": "application/json",
+        // Only declare JSON when there is a body: Fastify rejects an empty body with a JSON content-type
+        ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
         ...options.headers,
       },
     });
@@ -73,6 +128,7 @@ export class PositoryAPI {
       throw new Error(error.error || `HTTP ${res.status}`);
     }
 
+    if (res.status === 204) return undefined as T;
     return res.json();
   }
 
@@ -103,9 +159,59 @@ export class PositoryAPI {
     version: string
   ): Promise<void> {
     await this.fetch(
-      `/api/v1/packages/${repo}/${distribution}/${component}/${architecture}/${name}/${version}`,
+      `/api/v1/packages/${PositoryAPI.packagePath({ repo, distribution, component, architecture, name, version })}`,
       { method: "DELETE" }
     );
+  }
+
+  /** Path of a package (shared by metadata, delete, download). */
+  static packagePath(pkg: Pick<PackageMetadata, "repo" | "distribution" | "component" | "architecture" | "name" | "version">): string {
+    return [pkg.repo, pkg.distribution, pkg.component, pkg.architecture, pkg.name, pkg.version]
+      .map(encodeURIComponent)
+      .join("/");
+  }
+
+  async getPackage(pkg: Pick<PackageMetadata, "repo" | "distribution" | "component" | "architecture" | "name" | "version">): Promise<PackageMetadata> {
+    return this.fetch(`/api/v1/packages/${PositoryAPI.packagePath(pkg)}`);
+  }
+
+  /**
+   * Browser download of a .deb. Uses fetch (so API-key and SSO cookie auth both work),
+   * then saves the blob via a temporary object URL.
+   */
+  async downloadPackage(pkg: PackageMetadata): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/api/v1/packages/${PositoryAPI.packagePath(pkg)}/download`, {
+      credentials: this.apiKey ? undefined : "same-origin",
+      headers: this.apiKey ? { "X-Api-Key": this.apiKey } : {},
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(error.error || `HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${pkg.name}_${pkg.version}_${pkg.architecture}.deb`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
+  async getInfo(): Promise<ServerInfo> {
+    return this.fetch("/api/v1/info");
+  }
+
+  async getStats(): Promise<RepoStats> {
+    return this.fetch("/api/v1/stats");
+  }
+
+  async prunePackages(req: PruneRequest): Promise<PruneResult> {
+    return this.fetch("/api/v1/packages/prune", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
   }
 
   async getHealth(): Promise<HealthCheck> {
