@@ -1,3 +1,18 @@
+pository (0.6.0) stable; urgency=medium
+
+  * Dashboard refresh: URL-addressable tabs and package drawer, light/dark/system theme,
+    role-aware navigation, package detail with install snippets and downloads, search/sort,
+    version cleanup with dry-run preview, stats-driven overview, one-time API key reveal.
+  * Backend: trustProxy and identity-keyed rate limiting (apt/health exempt); md5 at upload and
+    cached apt indexes (+ Packages.gz); new /api/v1/info, /api/v1/stats, /api/v1/packages/prune
+    and download route; retention implemented; real upload/download byte metrics.
+  * Uploads: byte-identical re-uploads are a no-op (200, X-Pository-Unchanged); changed
+    re-uploads of a published version follow overwritePolicy (default: only GitHub OIDC builds
+    from main/master may replace; PR/branch/tag builds get 409).
+  * CI: only main pushes publish to Pository; PR runs build the .deb as an artifact only.
+
+ -- Pository Team <pository@example.com>  Sun, 08 Nov 2026 22:42:41 +0000
+
 pository (0.5.0) stable; urgency=medium
 
   * Authelia SSO: dashboard signs in via Authelia forward-auth (trusted-proxy headers gated by

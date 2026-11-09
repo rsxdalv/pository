@@ -1,5 +1,6 @@
 "use client";
 
+import { formatBytes } from "./overview/shared";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 
 interface StorageChartProps {
@@ -14,16 +15,10 @@ const COLORS = [
   "hsl(var(--chart-5))",
 ];
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
-}
-
 export function StorageChart({ data }: StorageChartProps) {
-  const chartData = Object.entries(data).map(([name, stats]) => ({
+  const chartData = Object.entries(data)
+    .filter(([, stats]) => stats.size > 0 || stats.count > 0)
+    .map(([name, stats]) => ({
     name,
     value: stats.size,
     count: stats.count,
@@ -31,24 +26,24 @@ export function StorageChart({ data }: StorageChartProps) {
 
   if (chartData.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-56 items-center justify-center text-sm text-muted-foreground">
         No storage data available
       </div>
     );
   }
 
   return (
-    <div className="h-64">
+    <div className="h-56">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
             data={chartData}
             cx="50%"
             cy="50%"
-            labelLine={false}
-            label={(entry) => `${entry.name}: ${formatBytes(entry.value)}`}
+            innerRadius={48}
             outerRadius={80}
-            fill="hsl(var(--primary))"
+            paddingAngle={chartData.length > 1 ? 2 : 0}
+            stroke="hsl(var(--card))"
             dataKey="value"
           >
             {chartData.map((_, index) => (
@@ -60,13 +55,13 @@ export function StorageChart({ data }: StorageChartProps) {
               if (active && payload && payload.length) {
                 const data = payload[0].payload;
                 return (
-                  <div className="rounded-lg border border-border bg-card p-3 shadow-lg">
-                    <p className="font-medium text-foreground">{data.name}</p>
+                  <div className="rounded-lg border border-border bg-popover p-3 shadow-lg">
+                    <p className="font-medium text-popover-foreground">{data.name}</p>
                     <p className="text-sm text-muted-foreground">
                       Size: {formatBytes(data.value)}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Packages: {data.count}
+                      Versions: {data.count}
                     </p>
                   </div>
                 );

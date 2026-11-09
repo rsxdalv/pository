@@ -13,6 +13,7 @@ import { registerPackageRoutes } from "./routes/packages.js";
 import { registerKeyRoutes } from "./routes/keys.js";
 import { registerHealthRoutes, trackRequest } from "./routes/health.js";
 import { registerAptRoutes } from "./routes/apt.js";
+import { registerManagementRoutes } from "./routes/management.js";
 import { registerOidcOverridesRoutes } from "./routes/oidc-overrides.js";
 import fs from "node:fs";
 import { dirname, join } from "node:path";
@@ -36,6 +37,9 @@ async function main() {
   const fastifyOpts: Record<string, unknown> = {
     logger: false, // We use our own logger
     bodyLimit: config.maxUploadSize,
+    // Behind nginx every socket peer is loopback; trust X-Forwarded-For from it
+    // so request.ip is the real client.
+    trustProxy: config.trustProxy,
   };
 
   // Configure TLS if enabled
@@ -67,14 +71,24 @@ async function main() {
     },
   });
 
-  // Register rate limiting
+  // Paths that bypass auth and rate limiting (probes, metrics, public apt repo).
+  // Compare on the path only: query strings must not change the outcome.
+  const isPublicPath = (url: string): boolean => {
+    const p = url.split("?")[0];
+    return p === "/healthz" || p === "/readyz" || p === "/metrics" || p.startsWith("/apt/");
+  };
+
+  // Register rate limiting. Runs at preHandler, i.e. after the onRequest auth
+  // hook below, so the key can be the authenticated identity.
   await app.register(rateLimit, {
-    max: 100, // 100 requests per minute
+    max: config.rateLimitMax,
     timeWindow: "1 minute",
-    keyGenerator: (request) => {
-      // Use API key ID if authenticated, otherwise use IP
-      return request.apiKey?.id || request.ip;
-    },
+    hook: "preHandler",
+    allowList: (request) => isPublicPath(request.url),
+    keyGenerator: (request) =>
+      request.apiKey?.id ||
+      (request.oidcClaims ? `oidc:${request.oidcClaims.repository}` : undefined) ||
+      request.ip,
   });
 
   // Register multipart support
@@ -95,7 +109,11 @@ async function main() {
   app.addHook("onResponse", async (request, reply) => {
     const startTime = (request as unknown as { startTime: number }).startTime;
     const latency = Date.now() - startTime;
-    trackRequest(request.method, reply.statusCode, latency);
+    const tb = request.trackedBytes;
+    trackRequest(request.method, reply.statusCode, latency, tb?.bytes, tb?.upload);
+
+    const path = request.url.split("?")[0];
+    if (path === "/healthz" || path === "/readyz") return; // probe spam
 
     logger.info("request", {
       method: request.method,
@@ -107,20 +125,31 @@ async function main() {
     });
   });
 
-  // Register auth middleware for API routes
+  // Auth runs at onRequest (it only reads headers) so the rate limiter can key
+  // on the authenticated identity. Failed auth attempts never reach the rate
+  // limiter, so they get their own per-IP budget to keep key guessing bounded.
   const authMiddleware = createAuthMiddleware(apiKeyService, config);
-  app.addHook("preHandler", async (request, reply) => {
-    // Skip auth for health endpoints and public apt repository routes
-    if (
-      request.url === "/healthz" ||
-      request.url === "/readyz" ||
-      request.url === "/metrics" ||
-      request.url.startsWith("/apt/")
-    ) {
+  const authFailures = new Map<string, { count: number; resetAt: number }>();
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.is404 || isPublicPath(request.url)) return;
+
+    const now = Date.now();
+    const failures = authFailures.get(request.ip);
+    if (failures && failures.resetAt > now && failures.count >= config.rateLimitMax) {
+      reply.code(429).send({ error: "Too many failed authentication attempts" });
       return;
     }
 
     await authMiddleware(request, reply);
+
+    if (reply.statusCode === 401) {
+      const cur = failures && failures.resetAt > now ? failures : { count: 0, resetAt: now + 60_000 };
+      cur.count++;
+      authFailures.set(request.ip, cur);
+      if (authFailures.size > 10_000) {
+        for (const [k, v] of authFailures) if (v.resetAt <= now) authFailures.delete(k);
+      }
+    }
   });
 
   // Register routes
@@ -129,7 +158,11 @@ async function main() {
   registerKeyRoutes(app, apiKeyService, logger);
   registerWhoamiRoutes(app);
   registerOidcOverridesRoutes(app, overridesService, apiKeyService, logger);
+  registerManagementRoutes(app, storage, apiKeyService, logger, config);
   registerAptRoutes(app, storage, config.dataRoot);
+
+  // Backfill md5 for pre-existing packages in the background (non-blocking)
+  storage.backfillMd5().catch((err) => logger.warn("md5 backfill failed", { error: String(err) }));
 
   // Start server
   try {

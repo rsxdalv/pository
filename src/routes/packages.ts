@@ -12,6 +12,10 @@ import { Logger } from "../utils/logger.js";
 import { Config } from "../config.js";
 import { isOidcAllowed } from "../services/oidc-scope.js";
 import { OidcOverridesService } from "../services/oidc-overrides.js";
+import { selectPrunable } from "../services/prune.js";
+import fs from "node:fs";
+import crypto from "node:crypto";
+import { decideOverwrite } from "../services/overwrite-policy.js";
 
 interface PackageParams {
   repo: string;
@@ -240,6 +244,53 @@ export function registerPackageRoutes(
           ? `oidc:${request.oidcClaims.repository}`
           : request.apiKey!.id;
 
+        // Existing version: identical bytes are a no-op; changed bytes follow the overwrite policy
+        const pathStr = `${repo}/${distribution}/${component}/${pkgArch}/${pkgName}/${pkgVersion}`;
+        const existing = storage.getPackageMetadata(loc);
+        const newSha256 = crypto.createHash("sha256").update(fileBuffer).digest("hex");
+        const decision = decideOverwrite({
+          existingSha256: existing?.sha256,
+          newSha256,
+          policy: config.overwritePolicy,
+          oidcRef: request.oidcClaims?.ref,
+          allowedRefs: config.overwriteAllowedRefs,
+        });
+        if (decision === "unchanged" && existing) {
+          logger.access({ action: "upload-unchanged", keyId: identity, ip: request.ip, path: pathStr });
+          reply.code(200).header("X-Pository-Unchanged", "true").send(existing);
+          return;
+        }
+        if (decision === "conflict") {
+          logger.access({
+            action: "upload-rejected-overwrite",
+            keyId: identity,
+            ip: request.ip,
+            path: pathStr,
+            ref: request.oidcClaims?.ref,
+          });
+          reply.code(409).send({
+            error: `${pkgName} ${pkgVersion} (${pkgArch}) already exists in ${repo}/${distribution}/${component} with different content`,
+            detail:
+              config.overwritePolicy === "reject"
+                ? "Published versions are immutable on this server. Bump the package version."
+                : `Only uploads from ${(config.overwriteAllowedRefs ?? []).join(", ")} may replace a published version` +
+                  (request.oidcClaims?.ref ? ` (this upload is from ${request.oidcClaims.ref})` : "") +
+                  ". Bump the package version, or upload from the default branch.",
+            existingSha256: existing?.sha256,
+            uploadedSha256: newSha256,
+          });
+          return;
+        }
+        if (existing) {
+          logger.warn("Overwriting existing package version", {
+            path: pathStr,
+            keyId: identity,
+            ref: request.oidcClaims?.ref,
+            previousSha256: existing.sha256,
+            newSha256,
+          });
+        }
+
         const metadata = await storage.storePackage(
           loc,
           fileBuffer,
@@ -253,6 +304,32 @@ export function registerPackageRoutes(
           ip: request.ip,
           path: `${repo}/${distribution}/${component}/${pkgArch}/${pkgName}/${pkgVersion}`,
         });
+
+        request.trackedBytes = { bytes: fileBuffer.length, upload: true };
+
+        // Apply retention policy to this package's group (never the version just uploaded)
+        if (config.retention?.enabled) {
+          try {
+            const group = storage
+              .listPackages({ repo, distribution, component, architecture: pkgArch })
+              .filter((p) => p.name === pkgName);
+            const victims = selectPrunable(group, config.retention, {
+              protect: (p) => p.version === pkgVersion,
+            });
+            for (const v of victims) {
+              if (storage.deletePackage(v)) {
+                logger.access({
+                  action: "retention-delete",
+                  keyId: identity,
+                  ip: request.ip,
+                  path: `${v.repo}/${v.distribution}/${v.component}/${v.architecture}/${v.name}/${v.version}`,
+                });
+              }
+            }
+          } catch (error) {
+            logger.error("Retention error", { error: String(error) });
+          }
+        }
 
         reply.code(201).send(metadata);
       } catch (error) {
@@ -331,7 +408,10 @@ export function registerPackageRoutes(
   );
 
   // Download package file
-  app.get<{ Params: { distribution: string; component: string; architecture: string; filename: string } }>(
+  app.get<{
+    Params: { distribution: string; component: string; architecture: string; filename: string };
+    Querystring: { repo?: string };
+  }>(
     "/repo/:distribution/:component/:architecture/:filename",
     {
       preHandler: async (request, reply) => {
@@ -360,7 +440,7 @@ export function registerPackageRoutes(
       const [, name, version] = match;
 
       const loc: PackageLocation = {
-        repo: "default", // Default repo for this endpoint
+        repo: sanitizePath(request.query.repo || "default"),
         distribution: sanitizePath(distribution),
         component: sanitizePath(component),
         architecture: sanitizePath(architecture),
@@ -393,8 +473,66 @@ export function registerPackageRoutes(
       }
 
       const { createReadStream } = await import("node:fs");
+      const size = fs.statSync(filePath).size;
+      reply.header("Content-Length", size);
+      request.trackedBytes = { bytes: size, upload: false };
       const stream = createReadStream(filePath);
       return reply.send(stream);
+    }
+  );
+
+  // Download package file by full location (used by the dashboard)
+  app.get<{ Params: PackageParams }>(
+    "/api/v1/packages/:repo/:distribution/:component/:architecture/:name/:version/download",
+    {
+      preHandler: async (request, reply) => {
+        if (!request.apiKey) {
+          reply.code(401).send({ error: "Authentication required" });
+          return;
+        }
+        if (!apiKeyService.hasPermission(request.apiKey, "read")) {
+          reply.code(403).send({ error: "Read permission required" });
+          return;
+        }
+      },
+    },
+    async (request, reply) => {
+      const params = request.params;
+      const loc: PackageLocation = {
+        repo: sanitizePath(params.repo),
+        distribution: sanitizePath(params.distribution),
+        component: sanitizePath(params.component),
+        architecture: sanitizePath(params.architecture),
+        name: sanitizePath(params.name),
+        version: sanitizePath(params.version),
+      };
+
+      const filePath = storage.getPackageFile(loc);
+      if (!filePath) {
+        reply.code(404).send({ error: "Package not found" });
+        return;
+      }
+      const metadata = storage.getPackageMetadata(loc);
+      const size = fs.statSync(filePath).size;
+
+      logger.access({
+        action: "download",
+        keyId: request.apiKey!.id,
+        ip: request.ip,
+        path: `${loc.repo}/${loc.distribution}/${loc.component}/${loc.architecture}/${loc.name}/${loc.version}`,
+      });
+
+      reply.header("Content-Type", "application/vnd.debian.binary-package");
+      reply.header(
+        "Content-Disposition",
+        `attachment; filename="${loc.name}_${loc.version}_${loc.architecture}.deb"`
+      );
+      reply.header("Content-Length", size);
+      if (metadata?.sha256) {
+        reply.header("X-Checksum-Sha256", metadata.sha256);
+      }
+      request.trackedBytes = { bytes: size, upload: false };
+      return reply.send(fs.createReadStream(filePath));
     }
   );
 

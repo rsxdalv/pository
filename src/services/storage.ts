@@ -11,6 +11,8 @@ export interface PackageMetadata {
   architecture: string;
   size: number;
   sha256: string;
+  // MD5 of the .deb, computed at upload time (lazily backfilled for older entries).
+  md5?: string;
   mime: string;
   uploadedAt: string;
   uploaderKeyId: string;
@@ -63,6 +65,9 @@ export type DebControlMeta = Pick<PackageMetadata,
 export class StorageService {
   private dataRoot: string;
   private indexCache: Map<string, PackageIndex> = new Map();
+  // Bumped whenever a repo's package set changes; used to invalidate derived caches (apt indexes).
+  private revisions: Map<string, number> = new Map();
+  private md5Inflight: Map<string, Promise<string | undefined>> = new Map();
 
   constructor(dataRoot: string) {
     this.dataRoot = dataRoot;
@@ -81,6 +86,15 @@ export class StorageService {
       loc.name,
       loc.version
     );
+  }
+
+  /** Monotonic counter that changes whenever the repo's index changes (upload/delete/prune). */
+  getRepoRevision(repo: string): number {
+    return this.revisions.get(repo) ?? 0;
+  }
+
+  private bumpRevision(repo: string): void {
+    this.revisions.set(repo, this.getRepoRevision(repo) + 1);
   }
 
   private getIndexPath(repo: string): string {
@@ -165,6 +179,7 @@ export class StorageService {
 
     // Compute SHA256
     const sha256 = crypto.createHash("sha256").update(fileBuffer).digest("hex");
+    const md5 = crypto.createHash("md5").update(fileBuffer).digest("hex");
 
     // Write file
     await pipeline(Readable.from(fileBuffer), fs.createWriteStream(debPath));
@@ -188,6 +203,7 @@ export class StorageService {
       architecture: loc.architecture,
       size: fileBuffer.length,
       sha256,
+      md5,
       mime: "application/vnd.debian.binary-package",
       uploadedAt: new Date().toISOString(),
       uploaderKeyId,
@@ -217,8 +233,65 @@ export class StorageService {
       index.packages.push(metadata);
     }
     this.saveIndex(loc.repo, index);
+    this.bumpRevision(loc.repo);
 
     return metadata;
+  }
+
+  /**
+   * Return the MD5 of a package, computing (by streaming) and persisting it
+   * once if the entry pre-dates upload-time hashing.
+   */
+  async ensureMd5(pkg: PackageMetadata): Promise<string | undefined> {
+    if (pkg.md5) return pkg.md5;
+    const key = [pkg.repo, pkg.distribution, pkg.component, pkg.architecture, pkg.name, pkg.version].join("/");
+    const pending = this.md5Inflight.get(key);
+    if (pending) return pending;
+
+    const work = (async () => {
+      const dir = this.getPackagePath(pkg);
+      const debPath = path.join(dir, "package.deb");
+      let md5: string;
+      try {
+        const hash = crypto.createHash("md5");
+        await pipeline(fs.createReadStream(debPath), hash);
+        md5 = hash.digest("hex");
+      } catch {
+        return undefined;
+      }
+
+      // Persist on the live index entry (it may have been replaced meanwhile).
+      const index = this.loadIndex(pkg.repo);
+      const idx = index.packages.findIndex(
+        (p) =>
+          p.name === pkg.name &&
+          p.version === pkg.version &&
+          p.distribution === pkg.distribution &&
+          p.component === pkg.component &&
+          p.architecture === pkg.architecture
+      );
+      if (idx < 0 || index.packages[idx].sha256 !== pkg.sha256) return md5;
+      if (!index.packages[idx].md5) {
+        index.packages[idx] = { ...index.packages[idx], md5 };
+        try {
+          fs.writeFileSync(path.join(dir, "metadata.json"), JSON.stringify(index.packages[idx], null, 2));
+        } catch { /* best-effort */ }
+        this.saveIndex(pkg.repo, index);
+      }
+      return md5;
+    })().finally(() => this.md5Inflight.delete(key));
+
+    this.md5Inflight.set(key, work);
+    return work;
+  }
+
+  /** Background, non-blocking backfill of md5 for entries that lack it. */
+  async backfillMd5(): Promise<void> {
+    for (const repo of this.listRepos()) {
+      for (const pkg of [...this.loadIndex(repo).packages]) {
+        if (!pkg.md5) await this.ensureMd5(pkg);
+      }
+    }
   }
 
   getPackageFile(loc: PackageLocation): string | null {
@@ -263,6 +336,7 @@ export class StorageService {
       index.packages.splice(idx, 1);
       this.saveIndex(loc.repo, index);
     }
+    this.bumpRevision(loc.repo);
 
     // Clean up empty parent directories
     this.cleanEmptyDirs(path.dirname(pkgPath));
@@ -375,6 +449,62 @@ export class StorageService {
       const stat = fs.statSync(path.join(this.dataRoot, entry));
       return stat.isDirectory();
     });
+  }
+
+  /** Aggregate statistics across all repos for the dashboard. */
+  getStats(now: Date = new Date()): {
+    totalSize: number;
+    versionCount: number;
+    packageCount: number;
+    byRepo: Record<string, { count: number; size: number }>;
+    byArchitecture: Record<string, number>;
+    uploadsByDay: { date: string; count: number; size: number }[];
+    recentUploads: PackageMetadata[];
+  } {
+    const all = this.listPackages({});
+    const byRepo: Record<string, { count: number; size: number }> = {};
+    const byArchitecture: Record<string, number> = {};
+    const names = new Set<string>();
+    let totalSize = 0;
+
+    const dayMs = 86_400_000;
+    const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const days = new Map<string, { date: string; count: number; size: number }>();
+    const uploadsByDay: { date: string; count: number; size: number }[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(todayUtc - i * dayMs).toISOString().slice(0, 10);
+      const entry = { date, count: 0, size: 0 };
+      days.set(date, entry);
+      uploadsByDay.push(entry);
+    }
+
+    for (const p of all) {
+      totalSize += p.size;
+      names.add(p.name);
+      const r = (byRepo[p.repo] ??= { count: 0, size: 0 });
+      r.count++;
+      r.size += p.size;
+      byArchitecture[p.architecture] = (byArchitecture[p.architecture] || 0) + 1;
+      const day = days.get(String(p.uploadedAt).slice(0, 10));
+      if (day) {
+        day.count++;
+        day.size += p.size;
+      }
+    }
+
+    const recentUploads = [...all]
+      .sort((a, b) => Date.parse(b.uploadedAt) - Date.parse(a.uploadedAt))
+      .slice(0, 10);
+
+    return {
+      totalSize,
+      versionCount: all.length,
+      packageCount: names.size,
+      byRepo,
+      byArchitecture,
+      uploadsByDay,
+      recentUploads,
+    };
   }
 
   getStorageStats(): { totalSize: number; packageCount: number } {

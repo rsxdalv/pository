@@ -89,3 +89,29 @@ retention:
 # ssoAdminGroups: [admins]                # Authelia groups -> admin role
 # ssoWriteGroups: []                      # Authelia groups -> write role
 # ssoDefaultRole: read                    # read | write | admin | none for other authenticated users
+
+# Reverse proxies whose X-Forwarded-For is trusted (env POSITORY_TRUST_PROXY: true|false|comma list)
+# trustProxy: "127.0.0.1,::1"
+
+# Requests per minute per identity (API key / SSO user / OIDC repo, else client IP).
+# /healthz, /readyz, /metrics and /apt/* are exempt. (env POSITORY_RATE_LIMIT_MAX)
+# rateLimitMax: 300
+
+# Retention: after each upload, prune older versions of the same package
+# (per repo/distribution/component/architecture/name, Debian version order).
+# With both set, a version is removed only if it is beyond keepLastN AND older than maxAgeDays.
+# retention:
+#   enabled: false
+#   keepLastN: 5
+#   maxAgeDays: 90
+
+# Re-uploading an existing version with DIFFERENT content (identical bytes are always a no-op 200):
+#   allow          - always replace (pre-0.6 behaviour)
+#   default-branch - (default) GitHub OIDC uploads may replace only from overwriteAllowedRefs;
+#                    builds from PRs, feature branches and tags get 409. API-key uploads may replace.
+#   reject         - published versions are immutable; changed re-uploads always get 409
+# (env POSITORY_OVERWRITE_POLICY)
+# overwritePolicy: default-branch
+# overwriteAllowedRefs:
+#   - refs/heads/main
+#   - refs/heads/master
