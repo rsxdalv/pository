@@ -67,8 +67,11 @@ jobs:
           name: pository-deb
           path: dist/*.deb
 
+      # Publish only from main: PR builds must never replace a published version.
+      # (PR runs still build the .deb and attach it as a workflow artifact above.)
       - name: Upload to Pository
         id: upload
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         uses: rsxdalv/pository-deploy-action@main
         with:
           host: ${{ secrets.POSITORY_URL }}
@@ -79,6 +82,7 @@ jobs:
           component: 'main'
 
       - name: Show upload results
+        if: steps.upload.outcome == 'success'
         run: |
           echo "Package: ${{ steps.upload.outputs.package-name }}"
           echo "Version: ${{ steps.upload.outputs.package-version }}"

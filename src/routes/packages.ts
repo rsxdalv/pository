@@ -14,6 +14,8 @@ import { isOidcAllowed } from "../services/oidc-scope.js";
 import { OidcOverridesService } from "../services/oidc-overrides.js";
 import { selectPrunable } from "../services/prune.js";
 import fs from "node:fs";
+import crypto from "node:crypto";
+import { decideOverwrite } from "../services/overwrite-policy.js";
 
 interface PackageParams {
   repo: string;
@@ -241,6 +243,53 @@ export function registerPackageRoutes(
         const identity = request.oidcClaims
           ? `oidc:${request.oidcClaims.repository}`
           : request.apiKey!.id;
+
+        // Existing version: identical bytes are a no-op; changed bytes follow the overwrite policy
+        const pathStr = `${repo}/${distribution}/${component}/${pkgArch}/${pkgName}/${pkgVersion}`;
+        const existing = storage.getPackageMetadata(loc);
+        const newSha256 = crypto.createHash("sha256").update(fileBuffer).digest("hex");
+        const decision = decideOverwrite({
+          existingSha256: existing?.sha256,
+          newSha256,
+          policy: config.overwritePolicy,
+          oidcRef: request.oidcClaims?.ref,
+          allowedRefs: config.overwriteAllowedRefs,
+        });
+        if (decision === "unchanged" && existing) {
+          logger.access({ action: "upload-unchanged", keyId: identity, ip: request.ip, path: pathStr });
+          reply.code(200).header("X-Pository-Unchanged", "true").send(existing);
+          return;
+        }
+        if (decision === "conflict") {
+          logger.access({
+            action: "upload-rejected-overwrite",
+            keyId: identity,
+            ip: request.ip,
+            path: pathStr,
+            ref: request.oidcClaims?.ref,
+          });
+          reply.code(409).send({
+            error: `${pkgName} ${pkgVersion} (${pkgArch}) already exists in ${repo}/${distribution}/${component} with different content`,
+            detail:
+              config.overwritePolicy === "reject"
+                ? "Published versions are immutable on this server. Bump the package version."
+                : `Only uploads from ${(config.overwriteAllowedRefs ?? []).join(", ")} may replace a published version` +
+                  (request.oidcClaims?.ref ? ` (this upload is from ${request.oidcClaims.ref})` : "") +
+                  ". Bump the package version, or upload from the default branch.",
+            existingSha256: existing?.sha256,
+            uploadedSha256: newSha256,
+          });
+          return;
+        }
+        if (existing) {
+          logger.warn("Overwriting existing package version", {
+            path: pathStr,
+            keyId: identity,
+            ref: request.oidcClaims?.ref,
+            previousSha256: existing.sha256,
+            newSha256,
+          });
+        }
 
         const metadata = await storage.storePackage(
           loc,

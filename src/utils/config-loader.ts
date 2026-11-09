@@ -1,3 +1,4 @@
+import { isOverwritePolicy } from "../services/overwrite-policy.js";
 import fs from "node:fs";
 import path from "node:path";
 import { parse } from "yaml";
@@ -72,6 +73,12 @@ export function loadConfig(configPath?: string): Config {
   if (process.env.POSITORY_RATE_LIMIT_MAX) {
     const n = parseInt(process.env.POSITORY_RATE_LIMIT_MAX, 10);
     if (Number.isFinite(n) && n > 0) config.rateLimitMax = n;
+  }
+  if (process.env.POSITORY_OVERWRITE_POLICY) {
+    config.overwritePolicy = process.env.POSITORY_OVERWRITE_POLICY.trim() as Config["overwritePolicy"];
+  }
+  if (!isOverwritePolicy(config.overwritePolicy)) {
+    throw new Error(`Invalid overwritePolicy "${String(config.overwritePolicy)}" (expected allow | default-branch | reject)`);
   }
   if (process.env.POSITORY_CORS_ORIGINS) {
     config.corsOrigins = process.env.POSITORY_CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean);

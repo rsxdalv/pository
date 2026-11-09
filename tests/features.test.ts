@@ -63,12 +63,12 @@ ${extraConfig}
   };
 }
 
-function buildDeb(name: string, version: string, arch = "amd64"): Buffer {
+function buildDeb(name: string, version: string, arch = "amd64", descSuffix = ""): Buffer {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "deb-build-"));
   fs.mkdirSync(path.join(root, "DEBIAN"));
   fs.writeFileSync(
     path.join(root, "DEBIAN", "control"),
-    `Package: ${name}\nVersion: ${version}\nArchitecture: ${arch}\nMaintainer: T <t@example.com>\nDescription: test ${name}\n`
+    `Package: ${name}\nVersion: ${version}\nArchitecture: ${arch}\nMaintainer: T <t@example.com>\nDescription: test ${name}${descSuffix}\n`
   );
   const out = path.join(root, "out.deb");
   execFileSync("dpkg-deb", ["-Zgzip", "--build", path.join(root), out], { stdio: "pipe" });
@@ -344,5 +344,59 @@ describe("Rate limiting", () => {
       const res = await fetch(`${srv.base}/api/v1/info`, { headers: { "X-Forwarded-For": `10.0.0.${i}` } });
       assert.strictEqual(res.status, 401);
     }
+  });
+});
+
+describe("Overwrite policy", () => {
+  describe("default-branch (default)", () => {
+    let srv: TestServer;
+    before(async () => {
+      srv = await startServer(3097);
+    });
+    after(async () => srv.stop());
+
+    it("treats a byte-identical re-upload as a no-op", async () => {
+      const deb = buildDeb("same", "1.0");
+      const first = await upload(srv, deb);
+      assert.strictEqual(first.status, 201);
+      const firstMeta: any = await first.json();
+      const again = await upload(srv, deb);
+      assert.strictEqual(again.status, 200);
+      assert.strictEqual(again.headers.get("x-pository-unchanged"), "true");
+      const againMeta: any = await again.json();
+      assert.strictEqual(againMeta.uploadedAt, firstMeta.uploadedAt);
+      assert.strictEqual(againMeta.sha256, firstMeta.sha256);
+    });
+
+    it("lets API-key uploads replace a version (they carry no git ref)", async () => {
+      assert.strictEqual((await upload(srv, buildDeb("changing", "1.0", "amd64", " A"))).status, 201);
+      const b = buildDeb("changing", "1.0", "amd64", " B");
+      assert.strictEqual((await upload(srv, b)).status, 201);
+      const { data } = await getJson(srv, "/api/v1/packages?name=changing");
+      assert.strictEqual(data.packages.length, 1);
+      assert.strictEqual(data.packages[0].sha256, crypto.createHash("sha256").update(b).digest("hex"));
+    });
+  });
+
+  describe("reject", () => {
+    let srv: TestServer;
+    before(async () => {
+      srv = await startServer(3098, "overwritePolicy: reject\n");
+    });
+    after(async () => srv.stop());
+
+    it("refuses a changed re-upload with 409 and keeps the original", async () => {
+      const a = buildDeb("frozen", "1.0", "amd64", " A");
+      assert.strictEqual((await upload(srv, a)).status, 201);
+      const res = await upload(srv, buildDeb("frozen", "1.0", "amd64", " B"));
+      assert.strictEqual(res.status, 409);
+      const body: any = await res.json();
+      assert.match(body.error, /already exists/);
+      assert.strictEqual(body.existingSha256, crypto.createHash("sha256").update(a).digest("hex"));
+      const { data } = await getJson(srv, "/api/v1/packages?name=frozen");
+      assert.strictEqual(data.packages[0].sha256, body.existingSha256);
+      // identical bytes are still fine
+      assert.strictEqual((await upload(srv, a)).status, 200);
+    });
   });
 });
