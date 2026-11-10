@@ -38,6 +38,18 @@ case "$1" in
         fi
         chown pository:pository /etc/pository/oidc-overrides.json
         chmod 640 /etc/pository/oidc-overrides.json
+
+        # Secrets (POSITORY_SSO_SECRET, POSITORY_ADMIN_KEY) live in the environment
+        # file; systemd reads it as root, so nobody else needs access.
+        if [ -f /etc/default/pository ]; then
+            chown root:root /etc/default/pository
+            chmod 600 /etc/default/pository
+        fi
+        # Older releases created the log world-readable.
+        if [ -f /var/log/pository/pository.log ]; then
+            chmod 640 /var/log/pository/pository.log
+        fi
+        chmod 750 /var/log/pository
         
         # Install npm dependencies (use ci for reproducibility if lock file exists)
         cd /usr/share/pository

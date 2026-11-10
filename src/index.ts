@@ -15,6 +15,7 @@ import { registerHealthRoutes, trackRequest } from "./routes/health.js";
 import { registerAptRoutes } from "./routes/apt.js";
 import { registerManagementRoutes } from "./routes/management.js";
 import { registerOidcOverridesRoutes } from "./routes/oidc-overrides.js";
+import { redactSecrets } from "./utils/redact.js";
 import fs from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -23,7 +24,7 @@ async function main() {
   const config = loadConfig(configPath);
   const logger = new Logger(config.logPath);
 
-  logger.info("Starting pository", { config: { ...config, adminKey: "***" } });
+  logger.info("Starting pository", { config: redactSecrets(config) });
 
   // Initialize services
   const apiKeyService = new ApiKeyService(config.apiKeysPath, config.adminKey);

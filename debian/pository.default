@@ -14,7 +14,7 @@
 # POSITORY_PORT=3222
 
 # Override bind address
-# POSITORY_BIND_ADDRESS=0.0.0.0
+# POSITORY_BIND_ADDRESS=127.0.0.1
 
 # TLS settings
 # POSITORY_TLS_CERT=/etc/pository/server.crt

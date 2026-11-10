@@ -9,7 +9,9 @@ logPath: /var/log/pository
 
 # Server settings
 port: 3000
-bindAddress: 0.0.0.0
+# Loopback only: nginx (or another reverse proxy on this host) fronts the API.
+# Use 0.0.0.0 only if clients must reach the backend port directly.
+bindAddress: 127.0.0.1
 
 # TLS configuration (optional)
 tls:
