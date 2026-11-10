@@ -25,7 +25,13 @@ export class Logger {
     if (!fs.existsSync(this.logPath)) {
       fs.mkdirSync(this.logPath, { recursive: true });
     }
-    this.stream = fs.createWriteStream(this.logFile, { flags: "a" });
+    // The log carries request metadata; keep it readable by the service group only.
+    this.stream = fs.createWriteStream(this.logFile, { flags: "a", mode: 0o640 });
+    try {
+      fs.chmodSync(this.logFile, 0o640);
+    } catch {
+      // Not fatal: e.g. the file is owned by another user.
+    }
   }
 
   private log(level: LogLevel, message: string, meta: Record<string, unknown> = {}): void {

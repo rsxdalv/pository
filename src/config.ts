@@ -51,7 +51,7 @@ export const defaultConfig: Config = {
   dataRoot: "/var/lib/pository",
   logPath: "/var/log/pository",
   port: 3222,
-  bindAddress: "0.0.0.0",
+  bindAddress: "127.0.0.1",
   tls: {
     enabled: false,
   },

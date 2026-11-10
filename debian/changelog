@@ -1,3 +1,13 @@
+pository (0.6.1) stable; urgency=high
+
+  * Security: redact every secret-looking config value (ssoSecret included) from the
+    startup log line; previously only adminKey was masked.
+  * Security: log file is created 0640 and existing logs are tightened to 0640;
+    postinst makes /etc/default/pository root-only (0600).
+  * Default bindAddress is now 127.0.0.1 (nginx fronts the API).
+
+ -- Pository Team <pository@example.com>  Tue, 10 Nov 2026 14:00:31 +0000
+
 pository (0.6.0) stable; urgency=medium
 
   * Dashboard refresh: URL-addressable tabs and package drawer, light/dark/system theme,
